@@ -51,17 +51,18 @@
 #define FST_CMD_SESSION_ADD      "session_add"
 #define FST_CMD_SESSION_REMOVE   "session_remove"
 #define FST_CMD_SESSION_GET      "session_get"
-    #define FST_CSG_PNAME_OWN_ADDR   "own_addr"   /* pval = address string */
-    #define FST_CSG_PNAME_PEER_ADDR  "peer_addr"  /* pval = address string */
-    #define FST_CSG_PNAME_NEW_IFNAME "new_ifname" /* pval = ifname */
-    #define FST_CSG_PNAME_OLD_IFNAME "old_ifname" /* pval = ifname */
-    #define FST_CSG_PNAME_LLT        "llt"        /* pval = numeric llt value */
-    #define FST_CSG_PNAME_STATE      "state"      /* pval = FST_CS_PVAL_STATE_... */
+    #define FST_CSG_PNAME_OLD_PEER_ADDR  "old_peer_addr" /* pval = address string */
+    #define FST_CSG_PNAME_NEW_PEER_ADDR  "new_peer_addr" /* pval = address string */
+    #define FST_CSG_PNAME_OLD_IFNAME     "old_ifname"    /* pval = ifname */
+    #define FST_CSG_PNAME_NEW_IFNAME     "new_ifname"    /* pval = ifname */
+    #define FST_CSG_PNAME_LLT            "llt"           /* pval = numeric llt value */
+    #define FST_CSG_PNAME_STATE          "state"         /* pval = FST_CS_PVAL_STATE_... */
 #define FST_CMD_SESSION_SET      "session_set"
-    #define FST_CSS_PNAME_PEER_ADDR  FST_CSG_PNAME_PEER_ADDR
-    #define FST_CSS_PNAME_NEW_IFNAME FST_CSG_PNAME_NEW_IFNAME
-    #define FST_CSS_PNAME_OLD_IFNAME FST_CSG_PNAME_OLD_IFNAME
-    #define FST_CSS_PNAME_LLT        FST_CSG_PNAME_LLT
+    #define FST_CSS_PNAME_OLD_PEER_ADDR  FST_CSG_PNAME_OLD_PEER_ADDR
+    #define FST_CSS_PNAME_NEW_PEER_ADDR  FST_CSG_PNAME_NEW_PEER_ADDR
+    #define FST_CSS_PNAME_OLD_IFNAME     FST_CSG_PNAME_OLD_IFNAME
+    #define FST_CSS_PNAME_NEW_IFNAME     FST_CSG_PNAME_NEW_IFNAME
+    #define FST_CSS_PNAME_LLT            FST_CSG_PNAME_LLT
 #define FST_CMD_SESSION_INITIATE "session_initiate"
 #define FST_CMD_SESSION_RESPOND  "session_respond"
 #define FST_CMD_SESSION_TRANSFER "session_transfer"

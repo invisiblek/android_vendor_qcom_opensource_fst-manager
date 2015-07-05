@@ -224,8 +224,14 @@ static int _fst_mgr_session_set_peer_addr(struct fst_mgr_session *s,
 
 		sprintf(pval, MACSTR, MAC2STR(addr));
 
-		if (fst_session_set(s->id, FST_CSS_PNAME_PEER_ADDR, pval)) {
-			fst_mgr_printf(MSG_ERROR, "session %u: cannot set addr to %s",
+		if (fst_session_set(s->id, FST_CSS_PNAME_OLD_PEER_ADDR, pval)) {
+			fst_mgr_printf(MSG_ERROR, "session %u: cannot set old addr to %s",
+					s->id, pval);
+			return -1;
+		}
+
+		if (fst_session_set(s->id, FST_CSS_PNAME_NEW_PEER_ADDR, pval)) {
+			fst_mgr_printf(MSG_ERROR, "session %u: cannot set new addr to %s",
 					s->id, pval);
 			return -1;
 		}
@@ -1107,6 +1113,13 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 			session_id);
 	}
 
+	if (os_memcmp(sinfo.old_peer_addr, sinfo.new_peer_addr, ETH_ALEN)) {
+		fst_mgr_printf(MSG_ERROR, "session %u: " MACSTR
+			": non-transparent FST is not supported",
+			session_id, MAC2STR(sinfo.old_peer_addr));
+		return;
+	}
+
 	g = _fst_mgr_group_by_ifname(mgr, sinfo.old_ifname, &old_i);
 	if (!g) {
 		fst_mgr_printf(MSG_ERROR, "session %u: no group found for iface %s",
@@ -1128,10 +1141,10 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 		return;
 	}
 
-	p = _fst_mgr_group_peer_by_addr(g, sinfo.peer_addr);
+	p = _fst_mgr_group_peer_by_addr(g, sinfo.old_peer_addr);
 	if (!p) {
 		fst_mgr_printf(MSG_ERROR, "session %u: no peer found for " MACSTR,
-			session_id, MAC2STR(sinfo.peer_addr));
+			session_id, MAC2STR(sinfo.old_peer_addr));
 		return;
 	}
 
@@ -1145,7 +1158,6 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 			fst_mgr_printf(MSG_ERROR, "session %u: cannot sync "
 				"active iface. Rejecting.",
 				session_id);
-			_fst_mgr_session_respond(s , FALSE);
 			return;
 		}
 	}
@@ -1161,7 +1173,7 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 	s->llt       = sinfo.llt;
 	s->state     = FST_MGR_SESSION_STATE_INITIATED;
 
-	os_memcpy(s->addr, sinfo.peer_addr, ETH_ALEN);
+	os_memcpy(s->addr, sinfo.old_peer_addr, ETH_ALEN);
 
 	if (new_i->info.priority > old_i->info.priority) {
 		_fst_mgr_session_set_llt(s, FST_LLT_SWITCH_IMMEDIATELY);

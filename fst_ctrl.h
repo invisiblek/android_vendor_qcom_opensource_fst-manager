@@ -89,6 +89,7 @@ int fst_get_groups(struct fst_group_info **groups);
 
 struct fst_iface_info{
 	char name[FST_MAX_INTERFACE_SIZE];
+	u8   addr[ETH_ALEN];
 	u8   priority;
 	u32  llt;
 };
@@ -190,8 +191,8 @@ int fst_get_sessions(const struct fst_group_info *group, u32 **sessions);
 
 struct fst_session_info
 {
-	u8   own_addr[ETH_ALEN];
-	u8   peer_addr[ETH_ALEN];
+	u8   old_peer_addr[ETH_ALEN];
+	u8   new_peer_addr[ETH_ALEN];
 	char old_ifname[FST_MAX_INTERFACE_SIZE];
 	char new_ifname[FST_MAX_INTERFACE_SIZE];
 	u32  llt;

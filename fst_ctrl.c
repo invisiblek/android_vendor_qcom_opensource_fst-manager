@@ -322,12 +322,12 @@ static int session_info_parser(char *str, void *data)
 
 	if (!defstrcmp(p, FST_CTRL_PVAL_NONE))
 		;
-	else if (!defstrcmp(str, FST_CSG_PNAME_OWN_ADDR)) {
-		if (hwaddr_aton(p, si->own_addr))
+	else if (!defstrcmp(str, FST_CSG_PNAME_OLD_PEER_ADDR)) {
+		if (hwaddr_aton(p, si->old_peer_addr))
 			fst_mgr_printf(MSG_ERROR,
 				"bad own address string \'%s\'", p);
-	} else if (!defstrcmp(str, FST_CSG_PNAME_PEER_ADDR)) {
-		if (hwaddr_aton(p, si->peer_addr))
+	} else if (!defstrcmp(str, FST_CSG_PNAME_NEW_PEER_ADDR)) {
+		if (hwaddr_aton(p, si->new_peer_addr))
 			fst_mgr_printf(MSG_ERROR,
 				"bad peer address string \'%s\'", p);
 	} else if (!defstrcmp(str, FST_CSG_PNAME_NEW_IFNAME)) {
@@ -476,20 +476,47 @@ static int iface_parser(char *str, void *data)
 {
 	struct fst_iface_info *ii = data;
 	char *p, *e;
+	const char delims[] = "|";
 
-	p = strchr(str, ':');
+	p = strtok(str, delims);
 	if (!p) {
-		fst_mgr_printf(MSG_ERROR, "bad iface string reported \'%s\'", str);
+		fst_mgr_printf(MSG_ERROR, "bad iface name reported \'%s\'", str);
 		return -1;
 	}
-	*p++ = '\0';
-	strncpy(ii->name, str, sizeof(ii->name));
+	strncpy(ii->name, p, sizeof(ii->name));
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface address reported \'%s\'", str);
+		return -1;
+	}
+	if (hwaddr_aton(p, ii->addr)) {
+		fst_mgr_printf(MSG_ERROR, "bad addr %s: invalid addr string",
+			   p);
+		return -1;
+	}
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface priority reported \'%s\'", str);
+		return -1;
+	}
 	ii->priority = strtoul(p, &e, 0);
-	if (*e++ != ':') {
+	if (*e != '\0') {
 		fst_mgr_printf(MSG_ERROR, "bad iface string reported \'%s\'", p);
 		return -1;
 	}
-	ii->llt = strtoul(e, NULL, 0);
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface llt reported \'%s\'", str);
+		return -1;
+	}
+	ii->llt = strtoul(p, &e, 0);
+	if (*e != '\0') {
+		fst_mgr_printf(MSG_ERROR, "bad iface llt reported \'%s\'", p);
+		return -1;
+	}
 
 	return 0;
 }
