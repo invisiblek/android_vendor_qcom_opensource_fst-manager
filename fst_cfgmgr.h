@@ -47,6 +47,10 @@ void fst_cfgmgr_deinit();
 int fst_cfgmgr_get_group_ifaces(const struct fst_group_info *group,
 	struct fst_iface_info **ifaces);
 int fst_cfgmgr_get_groups(struct fst_group_info **groups);
+int fst_cfgmgr_get_iface_group_cipher(const struct fst_iface_info *iface,
+	char *buf, int len);
+int fst_cfgmgr_get_iface_pairwise_cipher(const struct fst_iface_info *iface,
+	char *buf, int len);
 
 int fst_cfgmgr_on_global_init(void);
 void fst_cfgmgr_on_global_deinit(void);

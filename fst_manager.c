@@ -708,6 +708,29 @@ static struct fst_mgr_peer *_fst_mgr_group_peer_by_addr(struct fst_mgr_group *g,
 	return NULL;
 }
 
+static Boolean _fst_mgr_is_peer_connected(struct fst_mgr_group *g,
+		const char *ifname,
+		const u8 *addr)
+{
+	struct fst_mgr_peer *p = NULL;
+	struct fst_mgr_peer_iface *pi;
+
+	p = _fst_mgr_group_peer_by_addr(g, addr);
+	if (!p)
+		return FALSE;
+
+	_fst_peer_foreach_iface(p, pi) {
+		fst_mgr_printf(MSG_ERROR, "pi %p", pi);
+		fst_mgr_printf(MSG_ERROR, "pi->iface %p", pi->iface);
+		fst_mgr_printf(MSG_ERROR, "pi->iface->info %p", &pi->iface->info);
+		fst_mgr_printf(MSG_ERROR, "pi->iface->info.name %s", pi->iface->info.name);
+		if (!os_strncmp(pi->iface->info.name, ifname, FST_MAX_INTERFACE_SIZE))
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
 static struct fst_mgr_peer *
 _fst_mgr_group_peer_by_session(struct fst_mgr_group *g,
 		struct fst_mgr_session *s)
@@ -902,6 +925,12 @@ static void _fst_mgr_on_peer_connected(struct fst_mgr *mgr,
 	if (!g) {
 		fst_mgr_printf(MSG_ERROR, "iface %s: no group found",
 				ifname);
+		return;
+	}
+
+	if (_fst_mgr_is_peer_connected(g, ifname, addr)) {
+		fst_mgr_printf(MSG_INFO, "peer already connected on iface %s",
+			       ifname);
 		return;
 	}
 

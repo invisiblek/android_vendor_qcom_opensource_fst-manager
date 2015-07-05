@@ -56,6 +56,10 @@ int fst_ini_config_get_mux_ifname(struct fst_ini_config *h,
 	const char *gname, char *buf, int buflen);
 Boolean fst_ini_config_is_mux_managed(struct fst_ini_config *h,
 	const char *gname);
+int fst_ini_config_get_iface_group_cipher(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len);
+int fst_ini_config_get_iface_pairwise_cipher(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len);
 
 #endif /*  __FST_INI_CONF_H__ */
 

@@ -51,6 +51,7 @@
 #include "common/wpa_ctrl.h"
 #include "fst/fst_ctrl_defs.h"
 #include "fst_ctrl.h"
+#include "fst_cfgmgr.h"
 
 static struct wpa_ctrl *ctrl_evt;
 static struct wpa_ctrl *ctrl_cmd;
@@ -618,22 +619,47 @@ int fst_dup_connection(const struct fst_iface_info *iface,
 {
 	char buf[4096];
 	char cmd[256];
+	char *strstart, *strend;
 	size_t buf_len = sizeof(buf) - 1;
-	int ret, netid=-1;
+	int ret, srcnetid=-1, netid=-1;
 
 	if ( fst_is_supplicant()) {
+		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s LIST_NETWORKS", master);
+		ret = do_hostap_command(cmd, ret, buf, &buf_len);
+		if (ret < 0)
+			goto error_master_status;
+
+		strstart = buf;
+		strend = os_strchr(strstart, '\n');
+		while (strend) {
+			*strend = '\0';
+			if (os_strstr(strstart, "CURRENT")) {
+				srcnetid = (int)strtoul(strstart, NULL, 0);
+				break;
+			}
+			strstart = strend + 1;
+			strend = os_strchr(strstart, '\n');
+		}
+
+		if (srcnetid == -1) {
+			fst_mgr_printf(MSG_ERROR, "Cannot find master %s network id",
+				master);
+			goto error_no_netid;
+		}
+
+		buf_len = sizeof(buf) - 1;
 		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s ADD_NETWORK", iface->name);
 		ret = do_hostap_command(cmd, ret, buf, &buf_len);
 		if (ret < 0) {
-			return ret;
+			goto error_add_network;
 		}
 
 		if (!strncmp(buf, "FAIL", 4)) {
 			fst_mgr_printf(MSG_ERROR, "Failed add_network for %s: %s",
 				iface->name, buf);
-			return -1;
+			goto error_add_network;
 		}
-		netid = atoi(buf);
+		netid = (int)strtoul(buf, NULL, 0);
 		fst_mgr_printf(MSG_DEBUG, "Added network %d for %s", netid, iface->name);
 
 		buf_len = sizeof(buf) - 1;
@@ -650,17 +676,117 @@ int fst_dup_connection(const struct fst_iface_info *iface,
 		}
 
 		buf_len = sizeof(buf) - 1;
-		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s SET_NETWORK %d key_mgmt NONE",
-		       iface->name, netid);
-
+		ret = snprintf(cmd, sizeof(cmd),
+			"IFNAME=%s GET_NETWORK %d key_mgmt", master, srcnetid);
 		ret = do_hostap_command(cmd, ret, buf, &buf_len);
-		if (ret < 0)
+		if (ret < 0) {
 			goto error_set;
+		}
+		strstart = os_strchr(buf, '\n');
+		if (!strstart)
+			strstart = buf;
+		else
+			strstart++;
+		fst_mgr_printf(MSG_DEBUG, "key_mgmt for net %d is %s",
+			srcnetid, strstart);
+		if (os_strcmp(strstart, "WPA-PSK") &&
+		    os_strcmp(strstart, "WPA2-PSK") &&
+		    os_strcmp(strstart, "NONE")) {
+			fst_mgr_printf(MSG_ERROR, "Unsupported key_mgmt: %s", strstart);
+			goto error_set;
+		}
 
-		if (strncmp(buf, "OK", 2)) {
-			fst_mgr_printf(MSG_ERROR, "Set key_mgmt for %d failed",
-				netid);
+		buf_len = sizeof(buf) - 1;
+		ret = snprintf(cmd, sizeof(cmd),
+			"IFNAME=%s SET_NETWORK %d key_mgmt %s",
+			iface->name, netid, strstart);
+		ret = do_hostap_command(cmd, ret, buf, &buf_len);
+		if (ret < 0) {
 			goto error_set;
+		}
+		if (strncmp(buf, "OK", 2)) {
+			fst_mgr_printf(MSG_ERROR,
+			  "Set wpa key_mgmt for %d failed", netid);
+			goto error_set;
+		}
+
+		if (os_strcmp(strstart, "NONE")) {
+			/* The target network is WPA-PSK */
+			strstart = buf;
+			if (fst_cfgmgr_get_iface_group_cipher(iface, buf,
+				sizeof(buf) - 1) == 0) {
+				buf_len = sizeof(buf) - 1;
+				ret = snprintf(cmd, sizeof(cmd),
+					"IFNAME=%s GET_NETWORK %d group",
+					master, srcnetid);
+				ret = do_hostap_command(cmd, ret, buf, &buf_len);
+				if (ret < 0) {
+					goto error_set;
+				}
+				strstart = os_strchr(buf, '\n');
+				if (!strstart)
+					strstart = buf;
+				else
+					strstart++;
+			}
+			buf_len = sizeof(buf) - 1;
+			ret = snprintf(cmd, sizeof(cmd),
+				"IFNAME=%s SET_NETWORK %d group %s",
+				iface->name, netid, strstart);
+			ret = do_hostap_command(cmd, ret, buf, &buf_len);
+			if (ret < 0) {
+				goto error_set;
+			}
+			if (strncmp(buf, "OK", 2)) {
+				fst_mgr_printf(MSG_ERROR,
+				"Set group for %d failed", netid);
+				goto error_set;
+			}
+
+			strstart = buf;
+			if (fst_cfgmgr_get_iface_pairwise_cipher(iface, buf,
+				sizeof(buf) - 1) == 0) {
+				buf_len = sizeof(buf) - 1;
+				ret = snprintf(cmd, sizeof(cmd),
+					"IFNAME=%s GET_NETWORK %d pairwise",
+					master, srcnetid);
+				ret = do_hostap_command(cmd, ret, buf, &buf_len);
+				if (ret < 0) {
+					goto error_set;
+				}
+				strstart = os_strchr(buf, '\n');
+				if (!strstart)
+					strstart = buf;
+				else
+					strstart++;
+			}
+			buf_len = sizeof(buf) - 1;
+			ret = snprintf(cmd, sizeof(cmd),
+				"IFNAME=%s SET_NETWORK %d pairwise %s",
+				iface->name, netid, strstart);
+			ret = do_hostap_command(cmd, ret, buf, &buf_len);
+			if (ret < 0) {
+				goto error_set;
+			}
+			if (strncmp(buf, "OK", 2)) {
+				fst_mgr_printf(MSG_ERROR,
+				  "Set pairwise for %d failed", netid);
+				goto error_set;
+			}
+
+			buf_len = sizeof(buf) - 1 ;
+			ret = snprintf(cmd, sizeof(cmd),
+				"DUP_NETWORK %s %s %d %d psk", master,
+				iface->name, srcnetid, netid);
+			ret = do_hostap_command(cmd, ret, buf, &buf_len);
+			if (ret < 0) {
+				goto error_set;
+			}
+			if (strncmp(buf, "OK", 2)) {
+				fst_mgr_printf(MSG_ERROR,
+				  "Dup PSK for %d failed", netid);
+				goto error_set;
+			}
 		}
 
 		buf_len = sizeof(buf) - 1;
@@ -688,6 +814,9 @@ error_set:
 		fst_disconnect_iface(iface);
 
 	}
+error_add_network:
+error_no_netid:
+error_master_status:
 	return ret;
 }
 
