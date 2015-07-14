@@ -289,3 +289,19 @@ int fst_ini_config_get_iface_pairwise_cipher(struct fst_ini_config *h,
 		return 0;
 	return strlen(buf);
 }
+
+int fst_ini_config_get_iface_hw_mode(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "hw_mode", buf, len))
+		return 0;
+	return strlen(buf);
+}
+
+int fst_ini_config_get_iface_channel(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "channel", buf, len))
+		return 0;
+	return strlen(buf);
+}

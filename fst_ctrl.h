@@ -154,9 +154,10 @@ Boolean fst_is_supplicant(void);
 
 /**
  * fst_add_iface - Add interfaces to Hostap
+ * @master: Master interface name
  * @iface: Interface name
  */
-int fst_add_iface(const struct fst_iface_info *iface);
+int fst_add_iface(const char *master, const struct fst_iface_info *iface);
 
 /**
  * fst_del_iface - Delete interface from Hostap

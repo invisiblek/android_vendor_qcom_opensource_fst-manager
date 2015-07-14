@@ -51,6 +51,11 @@ int fst_cfgmgr_get_iface_group_cipher(const struct fst_iface_info *iface,
 	char *buf, int len);
 int fst_cfgmgr_get_iface_pairwise_cipher(const struct fst_iface_info *iface,
 	char *buf, int len);
+int fst_cfgmgr_get_iface_hw_mode(const struct fst_iface_info *iface,
+	char *buf, int len);
+int fst_cfgmgr_get_iface_channel(const struct fst_iface_info *iface,
+	char *buf, int len);
+
 
 int fst_cfgmgr_on_global_init(void);
 void fst_cfgmgr_on_global_deinit(void);
