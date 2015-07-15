@@ -106,6 +106,7 @@ void main_loop(const char *ctrl_iface)
 	eloop_run();
 
 	fst_mgr_printf(MSG_INFO, "eloop finished");
+	terminate_signalled = TRUE;
 
 error_eloop_register_signal_terminate:
 	fst_manager_deinit();
