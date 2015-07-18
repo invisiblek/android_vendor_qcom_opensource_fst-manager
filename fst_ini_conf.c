@@ -273,3 +273,35 @@ Boolean fst_ini_config_is_mux_managed(struct fst_ini_config *h, const char *gnam
 		return FALSE;
 	}
 }
+
+int fst_ini_config_get_iface_group_cipher(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "wpa_group", buf, len))
+		return 0;
+	return strlen(buf);
+}
+
+int fst_ini_config_get_iface_pairwise_cipher(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "wpa_pairwise", buf, len))
+		return 0;
+	return strlen(buf);
+}
+
+int fst_ini_config_get_iface_hw_mode(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "hw_mode", buf, len))
+		return 0;
+	return strlen(buf);
+}
+
+int fst_ini_config_get_iface_channel(struct fst_ini_config *h,
+	const struct fst_iface_info *iface, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, iface->name, "channel", buf, len))
+		return 0;
+	return strlen(buf);
+}

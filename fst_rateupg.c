@@ -130,7 +130,7 @@ int fst_rate_upgrade_add_group(const struct fst_group_info *group)
 		g->slaves = ifaces;
 
 		for (i = 0; i < g->slave_cnt; i++) {
-			if (fst_add_iface(&ifaces[i])) {
+			if (fst_add_iface(master, &ifaces[i])) {
 				fst_mgr_printf(MSG_ERROR,
 				"Cannot add slave interface %s", ifaces[i].name);
 				goto error_add;

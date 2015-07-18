@@ -472,6 +472,72 @@ int fst_cfgmgr_get_group_ifaces(const struct fst_group_info *group,
 	return res;
 }
 
+int fst_cfgmgr_get_iface_group_cipher(const struct fst_iface_info *iface,
+	char *buf, int len)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		res = 0;
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_iface_group_cipher(fstcfg.handle, iface,
+			buf, len);
+		break;
+	}
+	return res;
+}
+
+int fst_cfgmgr_get_iface_pairwise_cipher(const struct fst_iface_info *iface,
+	char *buf, int len)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		res = 0;
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_iface_pairwise_cipher(fstcfg.handle, iface,
+			buf, len);
+		break;
+	}
+	return res;
+}
+
+int fst_cfgmgr_get_iface_hw_mode(const struct fst_iface_info *iface,
+	char *buf, int len)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		res = 0;
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_iface_hw_mode(fstcfg.handle, iface,
+			buf, len);
+		break;
+	}
+	return res;
+}
+
+int fst_cfgmgr_get_iface_channel(const struct fst_iface_info *iface,
+	char *buf, int len)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		res = 0;
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_iface_channel(fstcfg.handle, iface,
+			buf, len);
+		break;
+	}
+	return res;
+}
+
+
+
 int fst_cfgmgr_on_iface_init(const struct fst_group_info *group,
 	struct fst_iface_info *iface)
 {

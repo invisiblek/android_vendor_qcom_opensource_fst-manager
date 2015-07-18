@@ -30,7 +30,7 @@ OBJS += external/inih/ini.c
 
 L_CFLAGS += -DCONFIG_CTRL_IFACE -DCONFIG_CTRL_IFACE_UNIX -DCONFIG_FST -DCONFIG_LIBNL20 -DANDROID
 L_CFLAGS += -DCONFIG_CTRL_IFACE_CLIENT_DIR=\"/data/misc/wifi/sockets\"
-L_CFLAGS += -DCONFIG_CTRL_IFACE_DIR=\"/data/system/wpa_supplicant\"
+L_CFLAGS += -DCONFIG_CTRL_IFACE_DIR=\"/data/misc/wifi/hostapd\"
 L_CFLAGS += -DCONFIG_ANDROID_LOG
 L_CFLAGS += -DANDROID_LOG_NAME=\"fstman\"
 #Disable unused parameter warnings

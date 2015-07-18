@@ -51,6 +51,7 @@
 #include "common/wpa_ctrl.h"
 #include "fst/fst_ctrl_defs.h"
 #include "fst_ctrl.h"
+#include "fst_cfgmgr.h"
 
 static struct wpa_ctrl *ctrl_evt;
 static struct wpa_ctrl *ctrl_cmd;
@@ -60,6 +61,10 @@ static fst_notification_cb_func global_ntfy_cb = NULL;
 static void *global_ntfy_cb_ctx = NULL;
 
 #define defstrcmp(s, d) strncmp((s), (d), sizeof(d) - 1)
+
+#ifndef CONFIG_CTRL_IFACE_DIR
+#define CONFIG_CTRL_IFACE_DIR "/var/run/hostapd"
+#endif /* CONFIG_CTRL_IFACE_DIR */
 
 static char *get_pval(char *str, const char *pdesc)
 {
@@ -311,6 +316,8 @@ static int do_command_ex(int (*res_proc) (char *, void *), void *res_data,
 #define do_command(proc, data, fmt, ...) \
 	do_command_ex(proc, data, "FST-MANAGER ", fmt, ##__VA_ARGS__)
 
+#define do_simple_command(fmt, ...) \
+	do_command_ex(NULL, NULL, NULL, fmt, ##__VA_ARGS__)
 
 static int session_info_parser(char *str, void *data)
 {
@@ -322,12 +329,12 @@ static int session_info_parser(char *str, void *data)
 
 	if (!defstrcmp(p, FST_CTRL_PVAL_NONE))
 		;
-	else if (!defstrcmp(str, FST_CSG_PNAME_OWN_ADDR)) {
-		if (hwaddr_aton(p, si->own_addr))
+	else if (!defstrcmp(str, FST_CSG_PNAME_OLD_PEER_ADDR)) {
+		if (hwaddr_aton(p, si->old_peer_addr))
 			fst_mgr_printf(MSG_ERROR,
 				"bad own address string \'%s\'", p);
-	} else if (!defstrcmp(str, FST_CSG_PNAME_PEER_ADDR)) {
-		if (hwaddr_aton(p, si->peer_addr))
+	} else if (!defstrcmp(str, FST_CSG_PNAME_NEW_PEER_ADDR)) {
+		if (hwaddr_aton(p, si->new_peer_addr))
 			fst_mgr_printf(MSG_ERROR,
 				"bad peer address string \'%s\'", p);
 	} else if (!defstrcmp(str, FST_CSG_PNAME_NEW_IFNAME)) {
@@ -476,20 +483,47 @@ static int iface_parser(char *str, void *data)
 {
 	struct fst_iface_info *ii = data;
 	char *p, *e;
+	const char delims[] = "|";
 
-	p = strchr(str, ':');
+	p = strtok(str, delims);
 	if (!p) {
-		fst_mgr_printf(MSG_ERROR, "bad iface string reported \'%s\'", str);
+		fst_mgr_printf(MSG_ERROR, "bad iface name reported \'%s\'", str);
 		return -1;
 	}
-	*p++ = '\0';
-	strncpy(ii->name, str, sizeof(ii->name));
+	strncpy(ii->name, p, sizeof(ii->name));
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface address reported \'%s\'", str);
+		return -1;
+	}
+	if (hwaddr_aton(p, ii->addr)) {
+		fst_mgr_printf(MSG_ERROR, "bad addr %s: invalid addr string",
+			   p);
+		return -1;
+	}
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface priority reported \'%s\'", str);
+		return -1;
+	}
 	ii->priority = strtoul(p, &e, 0);
-	if (*e++ != ':') {
+	if (*e != '\0') {
 		fst_mgr_printf(MSG_ERROR, "bad iface string reported \'%s\'", p);
 		return -1;
 	}
-	ii->llt = strtoul(e, NULL, 0);
+
+	p = strtok(NULL, delims);
+	if (!p) {
+		fst_mgr_printf(MSG_ERROR, "bad iface llt reported \'%s\'", str);
+		return -1;
+	}
+	ii->llt = strtoul(p, &e, 0);
+	if (*e != '\0') {
+		fst_mgr_printf(MSG_ERROR, "bad iface llt reported \'%s\'", p);
+		return -1;
+	}
 
 	return 0;
 }
@@ -552,13 +586,112 @@ Boolean fst_is_supplicant(void)
 		fst_mgr_printf(MSG_ERROR, "Cannot execute command %s", cmd);
 		return FALSE;
 	}
-	if ((buf_len < 3) || strncmp(buf, "BAD", 3))
+	if (buf_len < 3)
+		return TRUE;
+	if (strncmp(buf, "BAD", 3) && strncmp(buf, "FAI", 3))
 		return TRUE;
 	else
 		return FALSE; 
 }
 
-int fst_add_iface(const struct fst_iface_info *iface)
+static int fst_dup_ap(const char *master,
+	const struct fst_iface_info *iface)
+{
+	char configbuf[4096], buf[2048];
+	char cmd[256];
+	char *strstart, *strend, *tok;
+	size_t buf_len = sizeof(buf) - 1;
+	int ret;
+	unsigned int i;
+	struct {
+		const char *get_name;
+		const char *set_name;
+		int (*override)(const struct fst_iface_info *, char*, int);
+	} hapds[] = {
+		{"ssid", "ssid", NULL},
+		{"bssid","bssid", NULL},
+		{"psk", "wpa_psk", NULL },
+		{"passphrase", "wpa_passphrase", NULL},
+		{"key_mgmt", "wpa_key_mgmt", NULL},
+		{"rsn_pairwise_cipher", "rsn_pairwise", fst_cfgmgr_get_iface_pairwise_cipher}
+	};
+
+	ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s GET_CONFIG", master);
+	ret = do_hostap_command(cmd, ret, configbuf, &buf_len);
+	if (ret < 0)
+		goto error_getconfig;
+
+	strstart = configbuf;
+	strend = os_strchr(strstart, '\n');
+	while (strend) {
+		*strend = '\0';
+		tok = os_strchr(strstart, '=');
+		if (tok) {
+			*tok++ = '\0';
+			for (i = 0; i < ARRAY_SIZE(hapds); i++) {
+				if (os_strcmp(strstart, hapds[i].get_name))
+					continue;
+
+				if (!os_strcmp(strstart, "key_mgmt")) {
+					/* Generate wpa type upon source key_mgmt*/
+					ret = do_simple_command("IFNAME=%s SET wpa %d",
+						iface->name,
+						os_strstr(tok, "WPA-PSK") ? 2:0);
+					if (ret < 0) {
+						fst_mgr_printf(MSG_ERROR,
+							"Set wpa failed");
+						goto error_setconfig;
+					}
+				}
+
+				if (hapds[i].override) {
+					ret = hapds[i].override(iface, buf, sizeof(buf)-1);
+					if (ret > 0)
+						tok = buf;
+				}
+
+				ret = do_simple_command("IFNAME=%s SET %s %s",
+					iface->name, hapds[i].set_name, tok);
+				if (ret < 0) {
+					fst_mgr_printf(MSG_ERROR, "Set %s failed",
+						hapds[i].set_name);
+					goto error_setconfig;
+				}
+			}
+		}
+		strstart = strend + 1;
+		strend = os_strchr(strstart, '\n');
+	}
+
+	if (fst_cfgmgr_get_iface_hw_mode(iface, buf, sizeof(buf) - 1) > 0) {
+		ret = do_simple_command("IFNAME=%s SET hw_mode %s", iface->name, buf);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR, "Set hw_mode failed");
+			goto error_setconfig;
+		}
+	}
+	if (fst_cfgmgr_get_iface_channel(iface, buf, sizeof(buf) - 1) > 0) {
+		ret = do_simple_command("IFNAME=%s SET channel %s", iface->name, buf);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR, "Set channel failed");
+			goto error_setconfig;
+		}
+	}
+
+	ret = do_simple_command("IFNAME=%s ENABLE", iface->name);
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR, "Enabling AP failed");
+		goto error_setconfig;
+	}
+
+	return 0;
+
+error_setconfig:
+error_getconfig:
+	return -1;
+}
+
+int fst_add_iface(const char *master, const struct fst_iface_info *iface)
 {
 	int res;
 	if (fst_is_supplicant()) {
@@ -566,9 +699,19 @@ int fst_add_iface(const struct fst_iface_info *iface)
 			" %s", iface->name);
 	}
 	else {
-		/* TODO: add interface in hostpad */
-		fst_mgr_printf(MSG_ERROR, "hostapd add iface not yet supported");
-		res = -1;
+		res = do_command_ex(NULL, NULL, "ADD", " %s " CONFIG_CTRL_IFACE_DIR,
+			iface->name);
+		if (res < 0) {
+			fst_mgr_printf(MSG_ERROR, "Failed add AP iface %s",
+			iface->name);
+			return -1;
+		}
+		res = fst_dup_ap(master, iface);
+		if (res < 0) {
+			fst_mgr_printf(MSG_ERROR, "fst_dup_ap failed");
+			fst_del_iface(iface);
+		}
+
 	}
 	return res;
 }
@@ -580,88 +723,182 @@ int fst_del_iface(const struct fst_iface_info *iface)
 		res = do_command_ex(NULL, NULL, "INTERFACE_REMOVE", " %s", iface->name);
 	}
 	else {
-		fst_mgr_printf(MSG_ERROR, "hostapd remove iface not yet supported");
-		res = -1;
+		res = do_command_ex(NULL, NULL, "REMOVE", " %s", iface->name);
 	}
 	return res;
+}
+
+static int fst_dup_station(const char *master,
+	const struct fst_iface_info *iface, const u8 *bssid)
+{
+	char buf[4096];
+	char cmd[256];
+	char *strstart, *strend;
+	size_t buf_len = sizeof(buf) - 1;
+	int ret, srcnetid=-1, netid=-1;
+
+	ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s LIST_NETWORKS", master);
+	ret = do_hostap_command(cmd, ret, buf, &buf_len);
+	if (ret < 0)
+		goto error_master_status;
+
+	strstart = buf;
+	strend = os_strchr(strstart, '\n');
+	while (strend) {
+		*strend = '\0';
+		if (os_strstr(strstart, "CURRENT")) {
+			srcnetid = (int)strtoul(strstart, NULL, 0);
+			break;
+		}
+		strstart = strend + 1;
+		strend = os_strchr(strstart, '\n');
+	}
+
+	if (srcnetid == -1) {
+		fst_mgr_printf(MSG_ERROR, "Cannot find master %s network id",
+			master);
+		goto error_no_netid;
+	}
+
+	buf_len = sizeof(buf) - 1;
+	ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s ADD_NETWORK", iface->name);
+	ret = do_hostap_command(cmd, ret, buf, &buf_len);
+	if (ret < 0) {
+		goto error_add_network;
+	}
+
+	if (!strncmp(buf, "FAIL", 4)) {
+		fst_mgr_printf(MSG_ERROR, "Failed add_network for %s: %s",
+			iface->name, buf);
+		goto error_add_network;
+	}
+	netid = (int)strtoul(buf, NULL, 0);
+	fst_mgr_printf(MSG_DEBUG, "Added network %d for %s", netid, iface->name);
+
+	ret = do_simple_command("IFNAME=%s SET_NETWORK %d bssid " MACSTR,
+		       iface->name, netid, MAC2STR(bssid));
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR, "Set bssid for %d failed",
+			netid);
+		goto error_set;
+	}
+
+	buf_len = sizeof(buf) - 1;
+	ret = snprintf(cmd, sizeof(cmd),
+		"IFNAME=%s GET_NETWORK %d key_mgmt", master, srcnetid);
+	ret = do_hostap_command(cmd, ret, buf, &buf_len);
+	if (ret < 0) {
+		goto error_set;
+	}
+	strstart = os_strchr(buf, '\n');
+	if (!strstart)
+		strstart = buf;
+	else
+		strstart++;
+	fst_mgr_printf(MSG_DEBUG,
+		"key_mgmt for net %d is %s", srcnetid, strstart);
+	if (os_strcmp(strstart, "WPA-PSK") &&
+	    os_strcmp(strstart, "WPA2-PSK") &&
+	    os_strcmp(strstart, "NONE")) {
+		fst_mgr_printf(MSG_ERROR, "Unsupported key_mgmt: %s", strstart);
+		goto error_set;
+	}
+
+	ret = do_simple_command("IFNAME=%s SET_NETWORK %d key_mgmt %s",
+		iface->name, netid, strstart);
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR,
+		  "Set wpa key_mgmt for %d failed", netid);
+		goto error_set;
+	}
+
+	if (os_strcmp(strstart, "NONE")) {
+		/* The target network is WPA-PSK */
+		strstart = buf;
+		if (fst_cfgmgr_get_iface_group_cipher(iface, buf,
+			sizeof(buf) - 1) == 0) {
+			buf_len = sizeof(buf) - 1;
+			ret = snprintf(cmd, sizeof(cmd),
+				"IFNAME=%s GET_NETWORK %d group",
+				master, srcnetid);
+			ret = do_hostap_command(cmd, ret, buf, &buf_len);
+			if (ret < 0) {
+				goto error_set;
+			}
+			strstart = os_strchr(buf, '\n');
+			if (!strstart)
+				strstart = buf;
+			else
+				strstart++;
+		}
+		ret = do_simple_command("IFNAME=%s SET_NETWORK %d group %s",
+			iface->name, netid, strstart);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR,
+			  "Set group for %d failed", netid);
+			goto error_set;
+		}
+
+		strstart = buf;
+		if (fst_cfgmgr_get_iface_pairwise_cipher(iface, buf,
+			sizeof(buf) - 1) == 0) {
+			buf_len = sizeof(buf) - 1;
+			ret = snprintf(cmd, sizeof(cmd),
+				"IFNAME=%s GET_NETWORK %d pairwise",
+				master, srcnetid);
+			ret = do_hostap_command(cmd, ret, buf, &buf_len);
+			if (ret < 0) {
+				goto error_set;
+			}
+			strstart = os_strchr(buf, '\n');
+			if (!strstart)
+				strstart = buf;
+			else
+				strstart++;
+		}
+		ret = do_simple_command("IFNAME=%s SET_NETWORK %d pairwise %s",
+			iface->name, netid, strstart);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR,
+			  "Set pairwise for %d failed", netid);
+			goto error_set;
+		}
+
+		ret = do_simple_command("DUP_NETWORK %s %s %d %d psk", master,
+			iface->name, srcnetid, netid);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR,
+			  "Dup PSK for %d failed", netid);
+			goto error_set;
+		}
+	}
+
+	ret = do_simple_command("IFNAME=%s SELECT_NETWORK %d", iface->name, netid);
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR, "Select network for %d failed",
+			netid);
+		goto error_set;
+	}
+	return 0;
+
+error_set:
+	if (netid  != -1) {
+		fst_disconnect_iface(iface);
+	}
+error_add_network:
+error_no_netid:
+error_master_status:
+	return -1;
 }
 
 int fst_dup_connection(const struct fst_iface_info *iface,
 	const char *master, const u8 *addr)
 {
-	char buf[4096];
-	char cmd[256];
-	size_t buf_len = sizeof(buf) - 1;
-	int ret, netid=-1;
-
+	int res = 0;
 	if ( fst_is_supplicant()) {
-		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s ADD_NETWORK", iface->name);
-		ret = do_hostap_command(cmd, ret, buf, &buf_len);
-		if (ret < 0) {
-			return ret;
-		}
-
-		if (!strncmp(buf, "FAIL", 4)) {
-			fst_mgr_printf(MSG_ERROR, "Failed add_network for %s: %s",
-				iface->name, buf);
-			return -1;
-		}
-		netid = atoi(buf);
-		fst_mgr_printf(MSG_DEBUG, "Added network %d for %s", netid, iface->name);
-
-		buf_len = sizeof(buf) - 1;
-		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s SET_NETWORK %d bssid " MACSTR,
-			       iface->name, netid, MAC2STR(addr));
-		ret = do_hostap_command(cmd, ret, buf, &buf_len);
-		if (ret < 0) {
-			goto error_set;
-		}
-		if (strncmp(buf, "OK", 2)) {
-			fst_mgr_printf(MSG_ERROR, "Set bssid for %d failed",
-				netid);
-			goto error_set;
-		}
-
-		buf_len = sizeof(buf) - 1;
-		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s SET_NETWORK %d key_mgmt NONE",
-		       iface->name, netid);
-
-		ret = do_hostap_command(cmd, ret, buf, &buf_len);
-		if (ret < 0)
-			goto error_set;
-
-		if (strncmp(buf, "OK", 2)) {
-			fst_mgr_printf(MSG_ERROR, "Set key_mgmt for %d failed",
-				netid);
-			goto error_set;
-		}
-
-		buf_len = sizeof(buf) - 1;
-		ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s SELECT_NETWORK %d",
-		       iface->name, netid);
-		ret = do_hostap_command(cmd, ret, buf, &buf_len);
-		if (ret < 0)
-			goto error_set;
-
-		if (strncmp(buf, "OK", 2)) {
-			fst_mgr_printf(MSG_ERROR, "Select network for %d failed",
-				netid);
-			goto error_set;
-		}
-		ret = 0;
+		res = fst_dup_station(master, iface, addr);
 	}
-	else {
-		/* TODO: add c in hostpad */
-		fst_mgr_printf(MSG_ERROR, "hostapd add iface not yet supported");
-		ret = -1;
-	}
-	return ret;
-error_set:
-	if (netid  != -1) {
-		fst_disconnect_iface(iface);
-
-	}
-	return ret;
+	return res;
 }
 
 int fst_disconnect_iface(const struct fst_iface_info *iface)
