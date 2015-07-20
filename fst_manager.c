@@ -720,10 +720,6 @@ static Boolean _fst_mgr_is_peer_connected(struct fst_mgr_group *g,
 		return FALSE;
 
 	_fst_peer_foreach_iface(p, pi) {
-		fst_mgr_printf(MSG_ERROR, "pi %p", pi);
-		fst_mgr_printf(MSG_ERROR, "pi->iface %p", pi->iface);
-		fst_mgr_printf(MSG_ERROR, "pi->iface->info %p", &pi->iface->info);
-		fst_mgr_printf(MSG_ERROR, "pi->iface->info.name %s", pi->iface->info.name);
 		if (!os_strncmp(pi->iface->info.name, ifname, FST_MAX_INTERFACE_SIZE))
 			return TRUE;
 	}
