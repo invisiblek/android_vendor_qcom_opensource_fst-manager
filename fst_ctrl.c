@@ -593,71 +593,108 @@ Boolean fst_is_supplicant(void)
 	else
 		return FALSE; 
 }
+static int fst_dup_ap_wpa_psk(const char *master,
+	const struct fst_iface_info *iface)
+{
+	int ret;
+	char buf[2048];
+
+	ret = do_simple_command("DUP_NETWORK %s %s wpa",
+		master, iface->name);
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR, "Dup wpa failed");
+		return -1;
+	}
+
+	ret = do_simple_command("DUP_NETWORK %s %s wpa_passphrase",
+		master, iface->name);
+	if (ret < 0) {
+		fst_mgr_printf(MSG_ERROR, "Dup wpa_passphrase failed");
+		/* wpa_passphrase cannot be duplicated, try wpa_psk */
+		ret = do_simple_command("DUP_NETWORK %s %s wpa_psk",
+			master, iface->name);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR, "Dup wpa_psk failed");
+			return -1;
+		}
+	}
+
+	if (fst_cfgmgr_get_iface_pairwise_cipher(iface,
+		buf, sizeof(buf)-1) > 0) {
+		ret = do_simple_command("IFNAME=%s SET rsn_pairwise %s",
+			iface->name, buf);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR,
+				"Set rsn_pairwise failed");
+			return -1;
+		}
+	}
+	else {
+		ret = do_simple_command("DUP_NETWORK %s %s rsn_pairwise",
+			master, iface->name);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR,
+				"Dup rsn_pairwise failed");
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static int fst_dup_ap_handle_config(const char *master,
+	const struct fst_iface_info *iface, const char *name, const char *val)
+{
+	if (!os_strcmp(name, "key_mgmt")) {
+		if (!os_strstr(val, "WPA-PSK")) {
+			fst_mgr_printf(MSG_ERROR,
+				"key_mgmt=%s is not supported", val);
+			return -1;
+		}
+
+		if (do_simple_command("IFNAME=%s SET wpa_key_mgmt WPA-PSK",
+			iface->name) < 0) {
+			fst_mgr_printf(MSG_ERROR, "Set wpa_key_mgmt failed");
+			return -1;
+		}
+
+		return fst_dup_ap_wpa_psk(master, iface);
+	}
+	else if (!os_strcmp(name, "ssid") ||
+		 !os_strcmp(name, "bssid")) {
+		if (do_simple_command("IFNAME=%s SET %s %s",
+			iface->name, name, val) < 0) {
+			fst_mgr_printf(MSG_ERROR, "Set %s failed", name);
+			return -1;
+		}
+	}
+
+	return 0;
+}
 
 static int fst_dup_ap(const char *master,
 	const struct fst_iface_info *iface)
 {
-	char configbuf[4096], buf[2048];
+	char buf[2048];
 	char cmd[256];
 	char *strstart, *strend, *tok;
 	size_t buf_len = sizeof(buf) - 1;
 	int ret;
-	unsigned int i;
-	struct {
-		const char *get_name;
-		const char *set_name;
-		int (*override)(const struct fst_iface_info *, char*, int);
-	} hapds[] = {
-		{"ssid", "ssid", NULL},
-		{"bssid","bssid", NULL},
-		{"psk", "wpa_psk", NULL },
-		{"passphrase", "wpa_passphrase", NULL},
-		{"key_mgmt", "wpa_key_mgmt", NULL},
-		{"rsn_pairwise_cipher", "rsn_pairwise", fst_cfgmgr_get_iface_pairwise_cipher}
-	};
 
 	ret = snprintf(cmd, sizeof(cmd), "IFNAME=%s GET_CONFIG", master);
-	ret = do_hostap_command(cmd, ret, configbuf, &buf_len);
+	ret = do_hostap_command(cmd, ret, buf, &buf_len);
 	if (ret < 0)
 		goto error_getconfig;
 
-	strstart = configbuf;
+	strstart = buf;
 	strend = os_strchr(strstart, '\n');
 	while (strend) {
 		*strend = '\0';
 		tok = os_strchr(strstart, '=');
 		if (tok) {
 			*tok++ = '\0';
-			for (i = 0; i < ARRAY_SIZE(hapds); i++) {
-				if (os_strcmp(strstart, hapds[i].get_name))
-					continue;
-
-				if (!os_strcmp(strstart, "key_mgmt")) {
-					/* Generate wpa type upon source key_mgmt*/
-					ret = do_simple_command("IFNAME=%s SET wpa %d",
-						iface->name,
-						os_strstr(tok, "WPA-PSK") ? 2:0);
-					if (ret < 0) {
-						fst_mgr_printf(MSG_ERROR,
-							"Set wpa failed");
-						goto error_setconfig;
-					}
-				}
-
-				if (hapds[i].override) {
-					ret = hapds[i].override(iface, buf, sizeof(buf)-1);
-					if (ret > 0)
-						tok = buf;
-				}
-
-				ret = do_simple_command("IFNAME=%s SET %s %s",
-					iface->name, hapds[i].set_name, tok);
-				if (ret < 0) {
-					fst_mgr_printf(MSG_ERROR, "Set %s failed",
-						hapds[i].set_name);
-					goto error_setconfig;
-				}
-			}
+			if (fst_dup_ap_handle_config(master, iface, strstart, tok))
+				goto error_setconfig;
 		}
 		strstart = strend + 1;
 		strend = os_strchr(strstart, '\n');
