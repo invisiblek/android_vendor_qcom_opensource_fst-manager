@@ -126,6 +126,19 @@ void fst_ini_config_deinit(struct fst_ini_config *h)
  */
 #define INI_MAX_STRING 80
 #define INI_MAX_TOKENS 16
+
+int fst_ini_config_get_ctrl_iface(struct fst_ini_config *h, char *buf, int size)
+{
+	if (!fst_ini_config_read(h, "fst_manager", "ctrl_iface",
+		buf, size)) {
+		fst_mgr_printf(MSG_ERROR,
+			"No ctrl_iface found in fst_manager config");
+		return -1;
+	}
+
+	return 0;
+}
+
 int fst_ini_config_get_group_ifaces(struct fst_ini_config *h,
 	const struct fst_group_info *group, struct fst_iface_info **ifaces)
 {

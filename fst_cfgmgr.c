@@ -450,6 +450,22 @@ int fst_cfgmgr_get_groups(struct fst_group_info **groups)
 	return res;
 }
 
+int fst_cfgmgr_get_ctrl_iface(char *buf, int size)
+{
+	int res = -1;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_ctrl_iface(fstcfg.handle, buf, size);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR,
+			"Cannot get ctrl_path in current config");
+	}
+	return res;
+}
+
 int fst_cfgmgr_get_group_ifaces(const struct fst_group_info *group,
 	struct fst_iface_info **ifaces)
 {

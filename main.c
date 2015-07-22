@@ -47,6 +47,7 @@
 #include "fst_cfgmgr.h"
 
 #define DEFAULT_FST_INIT_RETRY_PERIOD_SEC 1
+#define MAX_CTRL_IFACE_SIZE 256
 
 extern Boolean fst_ctrl_create(const char *ctrl_iface,
 	unsigned int ping_interval);
@@ -70,7 +71,7 @@ static void fst_manager_terminate(int sig, void *signal_ctx)
 
 static void usage(const char *prog)
 {
-	printf("Usage: %s [options] <ctrl_interace_name>\n", prog);
+	printf("Usage: %s [options] [<ctrl_interace_name>]\n", prog);
 	printf(", where options are:\n"
 	       "\t--version, -V       - show version.\n"
 	       "\t--daemon, -B        - run in daemon mode\n"
@@ -134,6 +135,7 @@ int main(int argc, char *argv[])
 	const char *ctrl_iface = NULL;
 	char *fstman_config_file = NULL;
 	int opt, i;
+	char buf[MAX_CTRL_IFACE_SIZE];
 
 	while ((opt = getopt_long_only(argc, argv, short_opts, long_opts, NULL))
 	       != -1) {
@@ -187,15 +189,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (argc - optind != 1) {
-		fst_mgr_printf(MSG_ERROR, "ctrl_interace_name has to be specified");
+	if (!fstman_config_file && argc - optind != 1) {
+		fst_mgr_printf(MSG_ERROR,
+			"either ctrl_interace_name or config has to be specified");
 		usage(argv[0]);
 		if (fstman_config_file)
 			os_free(fstman_config_file);
 		return 1;
 	}
-
-	ctrl_iface = argv[optind];
 
 	if (fstman_config_file) {
 		i = fst_cfgmgr_init(FST_CONFIG_INI, (void*)fstman_config_file);
@@ -205,6 +206,15 @@ int main(int argc, char *argv[])
 		i = fst_cfgmgr_init(FST_CONFIG_CLI, NULL);
 	if (i != 0) {
 		fst_mgr_printf(MSG_ERROR, "FST Configuration error");
+		return -1;
+	}
+
+	if (argc - optind == 1)
+		ctrl_iface = argv[optind];
+	else if (!fst_cfgmgr_get_ctrl_iface(buf, sizeof(buf)))
+		ctrl_iface = buf;
+	else {
+		fst_mgr_printf(MSG_ERROR, "cannot get ctrl_iface");
 		return -1;
 	}
 

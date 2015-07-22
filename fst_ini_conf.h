@@ -40,6 +40,8 @@ struct fst_ini_config;
 struct fst_ini_config *fst_ini_config_init(const char *filename);
 void fst_ini_config_deinit(struct fst_ini_config *h);
 
+int fst_ini_config_get_ctrl_iface(struct fst_ini_config *h,
+	char *buf, int size);
 int fst_ini_config_get_group_ifaces(struct fst_ini_config *h,
 	const struct fst_group_info *group,
 	struct fst_iface_info **ifaces);
