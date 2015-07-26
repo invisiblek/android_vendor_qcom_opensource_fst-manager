@@ -97,7 +97,6 @@ struct fst_mgr_peer_iface
 struct fst_mgr_peer
 {
 	u8                      addr[ETH_ALEN];
-	Boolean                 non_compliant;
 	struct fst_mgr_session *session;
 	struct fst_mgr_iface   *active_iface;
 	struct dl_list          ifaces;
@@ -480,8 +479,6 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 		return;
 	}
 
-	_fst_mgr_peer_check_compliance(p);
-
 	new_i = _fst_mgr_peer_get_next_iface(p);
 	if (new_i == NULL) {
 		fst_mgr_printf(MSG_WARNING,
@@ -491,6 +488,7 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 		return;
 	}
 
+	_fst_mgr_peer_check_compliance(p);
 	llt = MS_TO_LLT_VALUE(new_i->info.llt);
 	if (p->active_iface &&
 		p->active_iface->info.priority < new_i->info.priority) {
@@ -520,10 +518,25 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 
 static void _fst_mgr_peer_check_compliance(struct fst_mgr_peer *p)
 {
+	struct fst_mgr_peer_iface *pi;
+
 	WPA_ASSERT(p->session != NULL);
 
-	if (p->non_compliant)
+	if (fst_force_nc) {
 		p->session->non_compliant = TRUE;
+		return;
+	}
+
+	p->session->non_compliant = TRUE;
+	_fst_peer_foreach_iface(p, pi) {
+		if (fst_get_peer_mbies(&pi->iface->info,
+			p->addr, NULL) > 0) {
+			p->session->non_compliant = FALSE;
+			break;
+		}
+	}
+	fst_mgr_printf(MSG_INFO, "peer " MACSTR ": non_compliant: %d",
+		MAC2STR(p->addr), p->session->non_compliant);
 }
 
 static Boolean _fst_mgr_peer_add_iface(struct fst_mgr_peer *p,
@@ -536,8 +549,6 @@ static Boolean _fst_mgr_peer_add_iface(struct fst_mgr_peer *p,
 	pi->iface = i;
 
 	dl_list_add_tail(&p->ifaces, &pi->peer_lentry);
-
-	_fst_mgr_peer_check_compliance(p);
 
 	return TRUE;
 }
@@ -583,19 +594,11 @@ static int _fst_mgr_peer_init(struct fst_mgr_group *g, const u8 *addr,
 {
 	struct fst_mgr_peer    *p;
 	struct fst_mgr_session *s;
-	char *mbies = NULL;
 
 	if (_fst_mgr_session_init(g, &s, FST_INVALID_SESSION_ID)) {
 		fst_mgr_printf(MSG_ERROR, "group %s: cannot initialize session " MACSTR,
 				g->info.id, MAC2STR(addr));
 		goto error_session_init;
-	}
-
-	if (_fst_mgr_session_set_old_iface(s, i) ||
-		_fst_mgr_session_set_peer_addr(s, addr)) {
-		fst_mgr_printf(MSG_ERROR, "group %s: cannot configure session " MACSTR,
-				g->info.id, MAC2STR(addr));
-		goto error_session_cfg;
 	}
 
 	p = os_malloc(sizeof(*p));
@@ -612,14 +615,6 @@ static int _fst_mgr_peer_init(struct fst_mgr_group *g, const u8 *addr,
 	os_memcpy(p->addr, addr, ETH_ALEN);
 	p->active_iface  = i;
 	p->session       = s;
-	p->non_compliant = TRUE;
-	if (!fst_force_nc &&
-	    fst_get_peer_mbies(&g->info, &i->info, p->addr, &mbies) > 0)
-		p->non_compliant = FALSE;
-	fst_mgr_printf(MSG_INFO, "group %s: peer " MACSTR ": non_compliant: %d",
-			g->info.id, MAC2STR(addr), p->non_compliant);
-	if (mbies)
-		os_free(mbies);
 
 	dl_list_add_tail(&g->peers, &p->grp_lentry);
 
@@ -636,7 +631,6 @@ static int _fst_mgr_peer_init(struct fst_mgr_group *g, const u8 *addr,
 error_add_iface:
 	os_free(p);
 error_alloc:
-error_session_cfg:
 	_fst_mgr_session_deinit(s);
 error_session_init:
 	return -1;
@@ -1194,10 +1188,11 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 		return;
 	}
 
-	s->old_iface = old_i;
-	s->new_iface = new_i;
-	s->llt       = sinfo.llt;
-	s->state     = FST_MGR_SESSION_STATE_INITIATED;
+	s->old_iface     = old_i;
+	s->new_iface     = new_i;
+	s->llt           = sinfo.llt;
+	s->state         = FST_MGR_SESSION_STATE_INITIATED;
+	s->non_compliant = FALSE;
 
 	os_memcpy(s->addr, sinfo.old_peer_addr, ETH_ALEN);
 

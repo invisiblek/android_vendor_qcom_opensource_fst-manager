@@ -108,15 +108,13 @@ int fst_get_iface_peers(const struct fst_group_info *group,
 /**
  * fst_get_peer_mbies - get the hexadecimal dump of the peer's MBIEs on a given
  * interface
- * @group: FST group info from fst_get_groups()
  * @iface: FST interface info fst_get_group_ifaces()
  * @peer:  The peer's MAC address
  * @mbies: The hexadecimal dump of the peer's MBIEs on the given interface
- *				The array should be freed by caller.
+ *	if not NULL. The array should be freed by caller.
  * Returns: Number of allocated bytes if success or negative error code
  */
-int fst_get_peer_mbies(const struct fst_group_info *group,
-	struct fst_iface_info *iface, uint8_t *peer, char **mbies);
+int fst_get_peer_mbies(struct fst_iface_info *iface, uint8_t *peer, char **mbies);
 
 /**
  * fst_get_group_ifaces - get interfaces for the provided group
