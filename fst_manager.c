@@ -1093,7 +1093,7 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 		break;
 	case REASON_SWITCH:
 		WPA_ASSERT(evext->session_state.extra.to_initial.initiator !=
-			FST_INITIATOR_NONE);
+			FST_INITIATOR_UNDEFINED);
 		fst_mgr_printf(MSG_INFO, "session %u: " MACSTR " switched by %s side",
 			s->id, MAC2STR(s->addr),
 			(evext->session_state.extra.to_initial.initiator ==
