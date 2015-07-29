@@ -928,7 +928,7 @@ static int fst_dup_station(const char *master,
 
 error_set:
 	if (netid  != -1) {
-		fst_disconnect_iface(iface);
+		fst_dedup_connection(iface);
 	}
 error_add_network:
 error_no_netid:
@@ -946,7 +946,7 @@ int fst_dup_connection(const struct fst_iface_info *iface,
 	return res;
 }
 
-int fst_disconnect_iface(const struct fst_iface_info *iface)
+int fst_dedup_connection(const struct fst_iface_info *iface)
 {
 	if ( fst_is_supplicant()) {
 		return(do_command_ex(NULL, NULL,

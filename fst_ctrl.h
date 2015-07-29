@@ -174,10 +174,10 @@ int fst_dup_connection(const struct fst_iface_info *iface,
 	const char *master, const u8 *addr);
 
 /**
- * fst_disconnect_iface - Disconnects the interface
+ * fst_dedup_connection - Disconnects the interface
  * @iface: Interface
 */
-int fst_disconnect_iface(const struct fst_iface_info *iface);
+int fst_dedup_connection(const struct fst_iface_info *iface);
 
 /**
  * fst_get_sessions - Iterate FST session within a group
