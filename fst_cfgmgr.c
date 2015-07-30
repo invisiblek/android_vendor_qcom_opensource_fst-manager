@@ -108,7 +108,7 @@ static int set_iface_up(int sock, const char *ifname, Boolean up)
 
 static int enslave_device(int sock, const char *bond, const char *ifname)
 {
-	struct ifreq  if_mtu, if_enslave;
+	struct ifreq  if_enslave;
 	short int iface_flags;
 
 	if (sock < 0)
@@ -120,19 +120,6 @@ static int enslave_device(int sock, const char *bond, const char *ifname)
 	if (iface_flags & IFF_SLAVE) {
 		fst_mgr_printf(MSG_INFO, "Interface %s already enslaved", ifname);
 		return 0;
-	}
-
-	/* Set same MTU for slave. TODO: something else we should set ???? */
-	strncpy(if_mtu.ifr_name, bond, IFNAMSIZ);
-	if (ioctl(sock, SIOCGIFMTU, &if_mtu) < 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot get bonding %s MTU", bond);
-		return -2;
-	}
-
-	strncpy(if_mtu.ifr_name, ifname, IFNAMSIZ);
-	if (ioctl(sock, SIOCSIFMTU, &if_mtu) < 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot set slave %s MTU", ifname);
-		return -2;
 	}
 
 	/* Device should be down before bonding in new kernels */
@@ -178,15 +165,6 @@ static int release_device(int sock, const char *bond, const char *ifname)
 				ifname, bond, strerror(errno));
 			return -2;
 	}
-
-	/* TODO: Should we restore MTU ?? */
-
-	/* Device should be shut down after release? */
-	iface_flags &= ~IFF_UP;
-	if (set_iface_flags(sock, ifname, iface_flags) < 0) {
-		fst_mgr_printf(MSG_WARNING, "Cannot shut released device %s down", ifname);
-	}
-
 	return 0;
 }
 
