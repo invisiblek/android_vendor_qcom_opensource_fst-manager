@@ -142,18 +142,18 @@ int fst_ini_config_get_ctrl_iface(struct fst_ini_config *h, char *buf, int size)
 int fst_ini_config_get_group_ifaces(struct fst_ini_config *h,
 	const struct fst_group_info *group, struct fst_iface_info **ifaces)
 {
-	char buf[INI_MAX_STRING+1], buf2[INI_MAX_STRING+1];
+	char buf[INI_MAX_STRING+1], buf_ifaces[INI_MAX_STRING+1];
 	char *tokens[INI_MAX_TOKENS];
 	int i, cnt;
 
 	if (!fst_ini_config_read(h, (const char*)group->id, "interfaces",
-		buf, INI_MAX_STRING)) {
+		buf_ifaces, INI_MAX_STRING)) {
 		fst_mgr_printf(MSG_ERROR,
 			"No interfaces key for group %s", group->id);
 		return -1;
 	}
 
-	cnt = parse_csv(buf, tokens, INI_MAX_TOKENS);
+	cnt = parse_csv(buf_ifaces, tokens, INI_MAX_TOKENS);
 	if (cnt == 0) {
 		fst_mgr_printf(MSG_ERROR,
 			"No interfaces found for group %s", group->id);
@@ -171,11 +171,11 @@ int fst_ini_config_get_group_ifaces(struct fst_ini_config *h,
 	for (i = 0; i < cnt; i++) {
 		strncpy((*ifaces)[i].name, tokens[i], sizeof((*ifaces)[i].name));
 		if (fst_ini_config_read(h, (const char*)tokens[i], "priority",
-			buf2, INI_MAX_STRING))
-			(*ifaces)[i].priority = strtoul(buf2, NULL, 0);
+			buf, INI_MAX_STRING))
+			(*ifaces)[i].priority = strtoul(buf, NULL, 0);
 		if (fst_ini_config_read(h, (const char*)tokens[i], "default_llt",
-			buf2, INI_MAX_STRING))
-			(*ifaces)[i].llt = strtoul(buf2, NULL, 0);
+			buf, INI_MAX_STRING))
+			(*ifaces)[i].llt = strtoul(buf, NULL, 0);
 		fst_mgr_printf(MSG_DEBUG,
 			"iface %s (pri=%d, llt=%d) has been parsed",
 			(*ifaces)[i].name, (*ifaces)[i].priority, (*ifaces)[i].llt);

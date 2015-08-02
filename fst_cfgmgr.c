@@ -54,11 +54,6 @@ static int get_iface_flags(int sock, const char *ifname, short int *flags)
 {
 	struct ifreq ifr;
 
-	if (sock < 0) {
-		fst_mgr_printf(MSG_ERROR, "Socket not open");
-		return -1;
-	}
-
 	os_memset(&ifr, 0, sizeof(ifr));
 	os_strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
@@ -73,11 +68,6 @@ static int get_iface_flags(int sock, const char *ifname, short int *flags)
 static int set_iface_flags(int sock, const char *ifname, short int flags)
 {
 	struct ifreq ifr;
-
-	if (sock < 0) {
-		fst_mgr_printf(MSG_ERROR, "Socket not open");
-		return -1;
-	}
 
 	os_memset(&ifr, 0, sizeof(ifr));
 	os_strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -200,11 +190,11 @@ static int release_device(int sock, const char *bond, const char *ifname)
 	return 0;
 }
 
-static int bonding_ifaces_prepare()
+static int do_bonding_operations(Boolean enslave)
 {
 	struct fst_group_info *groups;
 	struct fst_iface_info *ifaces;
-	int gcnt, icnt, muxtype, sock, i, j;
+	int gcnt, icnt, muxtype, sock, i, j, res;
 	char buf[80];
 
 	if (fstcfg.handle == NULL) {
@@ -226,10 +216,18 @@ static int bonding_ifaces_prepare()
 	for (i = 0; i < gcnt; i++) {
 		muxtype = fst_cfgmgr_get_mux_type(groups[i].id,
 			buf, sizeof(buf)-1);
-		if (muxtype && os_strcmp(buf, "bonding"))
+		if (muxtype && os_strcmp(buf, "bonding")) {
+			fst_mgr_printf(MSG_DEBUG,
+				"Group %s mux type %s not supported, skipping",
+				groups[i].id, buf);
 			continue;
-		if (!fst_cfgmgr_is_mux_managed(groups[i].id))
+		}
+		if (!fst_cfgmgr_is_mux_managed(groups[i].id)) {
+			fst_mgr_printf(MSG_DEBUG,
+				"Group %s mux is unmanaged, skipping",
+				groups[i].id);
 			continue;
+		}
 		if (fst_cfgmgr_get_mux_ifname(groups[i].id, buf, sizeof(buf)-1) < 0) {
 			fst_mgr_printf(MSG_ERROR, "Cannot get mux name for %s",
 				groups[i].id);
@@ -244,25 +242,31 @@ static int bonding_ifaces_prepare()
 		}
 		for (j = 0; j < icnt; j++) {
 			fst_mgr_printf(MSG_DEBUG,
-				"Enslaving device %s to bonding %s on group %s",
-				ifaces[j].name, buf, groups[i].id);
-			if (enslave_device(sock, buf, ifaces[j].name) < 0) {
-				fst_mgr_printf(MSG_ERROR, "Cannot enslave %s",
+				"%s interface %s to mux %s (group %s)",
+				enslave ? "Enslaving":"Releasing", ifaces[j].name,
+				buf, groups[i].id);
+			if (enslave)
+				res = enslave_device(sock, buf, ifaces[j].name);
+			else
+				res = release_device(sock, buf, ifaces[i].name);
+			if (res < 0) {
+				fst_mgr_printf(MSG_ERROR, "Cannot process %s",
 					ifaces[j].name);
 				goto error_enslave;
 			}
 		}
-		fst_mgr_printf(MSG_DEBUG, "Setting bonding iface %s up", buf);
-		if (set_iface_up(sock, buf, TRUE) < 0) {
-			fst_mgr_printf(MSG_ERROR, "Cannot up iface %s", buf);
-				goto error_up;
+		fst_mgr_printf(MSG_DEBUG, "Setting bonding iface %s %s",
+			buf, enslave ? "up":"down");
+		if (set_iface_up(sock, buf, enslave) < 0) {
+			fst_mgr_printf(MSG_ERROR, "Cannot set iface %s", buf);
+				goto error_set_iface;
 		}
 		free(ifaces);
 	}
 	close(sock);
 	free(groups);
 	return 0;
-error_up:
+error_set_iface:
 error_enslave:
 	free(ifaces);
 error_ifaces:
@@ -275,79 +279,14 @@ error_handle:
 	return -1;
 }
 
+static int bonding_ifaces_prepare()
+{
+	return do_bonding_operations(TRUE);
+}
+
 static int bonding_ifaces_cleanup()
 {
-	struct fst_group_info *groups;
-	struct fst_iface_info *ifaces;
-	int gcnt, icnt, muxtype, sock, i, j;
-	char buf[80];
-
-	if (fstcfg.handle == NULL) {
-		fst_mgr_printf(MSG_ERROR, "Interfaces configuration not found");
-		goto error_handle;
-	}
-
-	gcnt = fst_ini_config_get_groups(fstcfg.handle, &groups);
-	if (gcnt < 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot read groups");
-		goto error_groups;
-	}
-
-	if ((sock = socket(AF_INET, SOCK_DGRAM,0)) < 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot open socket");
-		goto error_socket;
-	}
-
-	for (i = 0; i < gcnt; i++) {
-		muxtype = fst_cfgmgr_get_mux_type(groups[i].id,
-			buf, sizeof(buf)-1);
-		if (muxtype && os_strcmp(buf, "bonding"))
-			continue;
-		if (!fst_cfgmgr_is_mux_managed(groups[i].id))
-			continue;
-		if (fst_cfgmgr_get_mux_ifname(groups[i].id, buf, sizeof(buf)-1) < 0) {
-			fst_mgr_printf(MSG_ERROR, "Cannot get mux name for %s",
-				groups[i].id);
-			goto error_muxname;
-		}
-		icnt = fst_ini_config_get_group_ifaces(fstcfg.handle,
-			&groups[i], &ifaces);
-		if (icnt < 0) {
-			fst_mgr_printf(MSG_ERROR, "Cannot read interfaces for %s",
-				groups[i].id);
-			goto error_ifaces;
-		}
-		for (j = 0; j < icnt; j++) {
-			fst_mgr_printf(MSG_DEBUG,
-				"Releasing device %s from bonding %s on group %s",
-				ifaces[j].name, buf, groups[i].id);
-			if (release_device(sock, buf, ifaces[j].name) < 0) {
-				fst_mgr_printf(MSG_ERROR, "Cannot release %s",
-					ifaces[j].name);
-				goto error_release;
-			}
-		}
-		fst_mgr_printf(MSG_DEBUG, "Setting bonding iface %s down", buf);
-		if (set_iface_up(sock, buf, FALSE) < 0) {
-			fst_mgr_printf(MSG_ERROR, "Cannot down iface %s", buf);
-				goto error_down;
-		}
-		free(ifaces);
-	}
-	close(sock);
-	free(groups);
-	return 0;
-error_down:
-error_release:
-	free(ifaces);
-error_ifaces:
-error_muxname:
-	close(sock);
-error_socket:
-	free(groups);
-error_groups:
-error_handle:
-	return -1;
+	return do_bonding_operations(FALSE);
 }
 
 static int group_sessions_cleanup(const struct fst_group_info *gi)
@@ -586,7 +525,7 @@ int fst_cfgmgr_on_iface_deinit(struct fst_iface_info *iface)
 
 int fst_cfgmgr_on_global_init(void)
 {
-	struct fst_group_info *groups = NULL;
+	struct fst_group_info *groups;
 	int i, res = 0;
 
 	fst_mgr_printf(MSG_INFO, "enter");
@@ -605,7 +544,8 @@ int fst_cfgmgr_on_global_init(void)
 			group_sessions_cleanup(&groups[i]);
 			group_detach_all(&groups[i]);
 		}
-		fst_free(groups);
+		if (res)
+			fst_free(groups);
 		res = fst_rate_upgrade_init(fstcfg.handle);
 		break;
 	}

@@ -597,7 +597,7 @@ static int fst_dup_ap_wpa_psk(const char *master,
 	const struct fst_iface_info *iface)
 {
 	int ret;
-	char buf[2048];
+	char buf[64];
 
 	ret = do_simple_command("DUP_NETWORK %s %s wpa",
 		master, iface->name);
@@ -646,6 +646,7 @@ static int fst_dup_ap_handle_config(const char *master,
 	const struct fst_iface_info *iface, const char *name, const char *val)
 {
 	if (!os_strcmp(name, "key_mgmt")) {
+		/* key_mgmt returned from GET_CONFIG means it is a secured AP */
 		if (!os_strstr(val, "WPA-PSK")) {
 			fst_mgr_printf(MSG_ERROR,
 				"key_mgmt=%s is not supported", val);
