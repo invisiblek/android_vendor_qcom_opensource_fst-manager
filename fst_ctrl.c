@@ -56,6 +56,7 @@
 static struct wpa_ctrl *ctrl_evt;
 static struct wpa_ctrl *ctrl_cmd;
 static unsigned int     ctrl_ping_interval;
+static Boolean          ctrl_is_supplicant;
 
 static fst_notification_cb_func global_ntfy_cb = NULL;
 static void *global_ntfy_cb_ctx = NULL;
@@ -581,23 +582,31 @@ int fst_get_groups(struct fst_group_info **groups)
 
 Boolean fst_is_supplicant(void)
 {
+	return ctrl_is_supplicant;
+}
+
+static int fst_detect_ctrl_type(void)
+{
 	char buf[4096];
 	size_t buf_len = sizeof(buf) - 1;
-	char *cmd = "INTERFACE_LIST";
+	const char *cmd = "INTERFACE_LIST";
 	int ret = 0;
 
 	ret = do_hostap_command(cmd, os_strlen(cmd), buf, &buf_len);
 	if (ret < 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot execute command %s", cmd);
-		return FALSE;
+		return -1;
 	}
+
 	if (buf_len < 3)
-		return TRUE;
-	if (strncmp(buf, "BAD", 3) && strncmp(buf, "FAI", 3))
-		return TRUE;
+		ctrl_is_supplicant = TRUE;
+	else if (strncmp(buf, "BAD", 3) && strncmp(buf, "FAI", 3))
+		ctrl_is_supplicant = TRUE;
 	else
-		return FALSE;
+		ctrl_is_supplicant = FALSE;
+
+	return 0;
 }
+
 static int fst_dup_ap_wpa_psk(const char *master,
 	const struct fst_iface_info *iface)
 {
@@ -1074,6 +1083,11 @@ Boolean fst_ctrl_create(const char *ctrl_iface, unsigned int ping_interval)
 		goto error_eloop_register_read_sock;
 	}
 
+	if (fst_detect_ctrl_type()) {
+		fst_mgr_printf(MSG_ERROR, "cannot detect CTRL type");
+		goto error_detect_cli_type;
+	}
+
 	ctrl_ping_interval = ping_interval;
 	if (ctrl_ping_interval)
 		eloop_register_timeout(ctrl_ping_interval, 0, fst_ping, NULL, NULL);
@@ -1083,6 +1097,8 @@ Boolean fst_ctrl_create(const char *ctrl_iface, unsigned int ping_interval)
 
 	return TRUE;
 
+error_detect_cli_type:
+	eloop_unregister_read_sock(wpa_ctrl_get_fd(ctrl_evt));
 error_eloop_register_read_sock:
 	wpa_ctrl_close(ctrl_cmd);
 	ctrl_cmd = NULL;
