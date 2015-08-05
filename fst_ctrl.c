@@ -120,6 +120,9 @@ static int parse_list_proc(char *buf, void *data)
 	struct parse_list_proc_ctx *c = data;
 	int ret, i;
 
+	if (!strncmp(buf, "FAIL", 4))
+		return -1;
+
 	ret = parse_list(buf, list, ARRAY_SIZE(list));
 	if (!ret) {
 		fst_mgr_printf(MSG_DEBUG, "str list is empty");
