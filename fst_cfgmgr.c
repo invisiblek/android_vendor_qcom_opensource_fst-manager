@@ -269,24 +269,26 @@ static int bonding_ifaces_cleanup()
 
 static int group_sessions_cleanup(const struct fst_group_info *gi)
 {
-	uint32_t *sids;
-	int n, i;
+	uint32_t *sids = NULL;
+	int n, i, res = 0;
 
 	n = fst_get_sessions(gi, &sids);
 	if (n < 0) {
-		fst_mgr_printf(MSG_ERROR, "cannot get sessions for group %s",
+		fst_mgr_printf(MSG_WARNING, "cannot get sessions for group %s",
 				gi->id);
-		return -1;
-	} else if (n != 0) {
-		for (i = 0; i < n; i++)
-			if (fst_session_remove(sids[i]))
-				fst_mgr_printf(MSG_ERROR, "cannot remove session %u",
-						sids[i]);
-
-		fst_free(sids);
+		return 0;
 	}
 
-	return 0;
+	for (i = 0; i < n; i++) {
+		if (fst_session_remove(sids[i])) {
+			fst_mgr_printf(MSG_ERROR, "cannot remove session %u",
+					sids[i]);
+			res = -1;
+		}
+	}
+	fst_free(sids);
+
+	return res;
 }
 
 static int group_detach_all(const struct fst_group_info *group)
