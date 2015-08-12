@@ -81,6 +81,7 @@ static void usage(const char *prog)
 	       "\t--force-nc -n       - force non-compliant mode.\n"
 	       "\t--debug, -d         - increase debugging verbosity (-dd - more, "
 			"-ddd - even more)\n"
+	       "\t--logfile, -f <file>- log output to specified file\n"
 	       "\t--usage, -u         - this message\n"
 	       "\t--help, -h          - this message\n");
 	exit(2);
@@ -127,11 +128,13 @@ int main(int argc, char *argv[])
 		{"ping-int",  required_argument, NULL, 'p'},
 		{"force-nc", no_argument, NULL, 'n'},
 		{"debug",    optional_argument, NULL, 'd'},
+		{"logfile",  required_argument, NULL, 'f'},
 		{"usage",    no_argument, NULL, 'u'},
 		{"help",     no_argument, NULL, 'h'},
 		{NULL}
 	};
-	char short_opts[] = "VBc:r:nd::uh";
+	int res = -1;
+	char short_opts[] = "VBc:r:nd::f:uh";
 	const char *ctrl_iface = NULL;
 	char *fstman_config_file = NULL;
 	int opt, i;
@@ -152,15 +155,14 @@ int main(int argc, char *argv[])
 			if (fstman_config_file != NULL) {
 				fst_mgr_printf(MSG_ERROR,
 					"Multiple configurations not allowed\n");
-				os_free(fstman_config_file);
-				return 1;
+				goto error_cfmgr_params;
 			}
 			if (optarg != NULL)
 				fstman_config_file=os_strdup(optarg);
 			if (fstman_config_file == NULL) {
 				fst_mgr_printf(MSG_ERROR,
 					"Filename memory allocation error\n");
-				return 1;
+				goto error_cfmgr_params;
 			}
 			break;
 		case 'r':
@@ -183,6 +185,13 @@ int main(int argc, char *argv[])
 					fst_debug_level = MSG_EXCESSIVE;
 			}
 			break;
+		case 'f':
+			if (wpa_debug_open_file(optarg))  {
+				fst_mgr_printf(MSG_ERROR,
+					"Cannot open log file: %s", optarg);
+				goto error_cfmgr_params;
+			}
+			break;
 		case 'u':
 		case 'h':
 		case '?':
@@ -196,20 +205,16 @@ int main(int argc, char *argv[])
 		fst_mgr_printf(MSG_ERROR,
 			"either ctrl_interace_name or config has to be specified");
 		usage(argv[0]);
-		if (fstman_config_file != NULL)
-			os_free(fstman_config_file);
-		return 1;
+		goto error_cfmgr_params;
 	}
 
-	if (fstman_config_file) {
+	if (fstman_config_file)
 		i = fst_cfgmgr_init(FST_CONFIG_INI, (void*)fstman_config_file);
-		os_free(fstman_config_file);
-	}
 	else
 		i = fst_cfgmgr_init(FST_CONFIG_CLI, NULL);
 	if (i != 0) {
 		fst_mgr_printf(MSG_ERROR, "FST Configuration error");
-		return -1;
+		goto error_cfmgr_init;
 	}
 
 	if (argc - optind == 1)
@@ -218,13 +223,12 @@ int main(int argc, char *argv[])
 		ctrl_iface = buf;
 	else {
 		fst_mgr_printf(MSG_ERROR, "cannot get ctrl_iface");
-		return -1;
+		goto error_ctrl_iface;
 	}
 
 	if (eloop_init() != 0)  {
 		fst_mgr_printf(MSG_ERROR, "cannot init eloop");
-		fst_cfgmgr_deinit();
-		return -1;
+		goto error_eloop_init;
 	}
 
 	while (TRUE) {
@@ -234,7 +238,15 @@ int main(int argc, char *argv[])
 		os_sleep(DEFAULT_FST_INIT_RETRY_PERIOD_SEC, 0);
 	}
 
-	fst_cfgmgr_deinit();
 	eloop_destroy();
-	return 0;
+	res = 0;
+
+error_eloop_init:
+error_ctrl_iface:
+	fst_cfgmgr_deinit();
+error_cfmgr_init:
+error_cfmgr_params:
+	wpa_debug_close_file();
+	os_free(fstman_config_file);
+	return res;
 }

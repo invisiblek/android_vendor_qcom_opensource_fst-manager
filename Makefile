@@ -36,6 +36,7 @@ external_srcs += \
 	$(EXTERNAL_SRC_DIR)/inih/ini.c
 
 EXTERNAL_CFLAGS += -DCONFIG_CTRL_IFACE -DCONFIG_CTRL_IFACE_UNIX -DCONFIG_FST
+EXTERNAL_CFLAGS += -DCONFIG_DEBUG_FILE
 
 local_srcs += fst_ctrl.c fst_cfgmgr.c fst_ini_conf.c main.c fst_rateupg.c
 
