@@ -149,13 +149,14 @@ int main(int argc, char *argv[])
 			fst_main_do_loop = TRUE;
 			break;
 		case 'c':
-			if (fstman_config_file) {
+			if (fstman_config_file != NULL) {
 				fst_mgr_printf(MSG_ERROR,
 					"Multiple configurations not allowed\n");
 				os_free(fstman_config_file);
 				return 1;
 			}
-			fstman_config_file=os_strdup(optarg);
+			if (optarg != NULL)
+				fstman_config_file=os_strdup(optarg);
 			if (fstman_config_file == NULL) {
 				fst_mgr_printf(MSG_ERROR,
 					"Filename memory allocation error\n");
@@ -163,10 +164,12 @@ int main(int argc, char *argv[])
 			}
 			break;
 		case 'r':
-			fst_num_of_retries = strtoul(optarg, NULL, 0);
+			if (optarg != NULL)
+				fst_num_of_retries = strtoul(optarg, NULL, 0);
 			break;
 		case 'p':
-			fst_ping_interval = strtoul(optarg, NULL, 0);
+			if (optarg != NULL)
+				fst_ping_interval = strtoul(optarg, NULL, 0);
 			break;
 		case 'n':
 			fst_force_nc = TRUE;
@@ -193,7 +196,7 @@ int main(int argc, char *argv[])
 		fst_mgr_printf(MSG_ERROR,
 			"either ctrl_interace_name or config has to be specified");
 		usage(argv[0]);
-		if (fstman_config_file)
+		if (fstman_config_file != NULL)
 			os_free(fstman_config_file);
 		return 1;
 	}
@@ -218,7 +221,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (eloop_init())  {
+	if (eloop_init() != 0)  {
 		fst_mgr_printf(MSG_ERROR, "cannot init eloop");
 		fst_cfgmgr_deinit();
 		return -1;

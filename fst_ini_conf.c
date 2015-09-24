@@ -60,7 +60,7 @@ static int ini_handler(void* user, const char* section, const char* name,
 			strncmp(name, ctx->name, strlen(name)) == 0) {
 			ctx->is_found = TRUE;
 			if (ctx->buffer && ctx->buflen) {
-				strncpy(ctx->buffer, value, ctx->buflen);
+				os_strlcpy(ctx->buffer, value, ctx->buflen);
 			}
 		}
 	}
@@ -70,12 +70,13 @@ static int ini_handler(void* user, const char* section, const char* name,
 static int parse_csv(char *string, char **tokens, int tokenslen)
 {
 	const char *delim = " ,\t";
+	char *tokbuf;
 	int count = 0;
-	char *token = strtok(string, delim);
+	char *token = strtok_r(string, delim, &tokbuf);
 	while (token != NULL && count <= tokenslen) {
 		count++;
 		*tokens++ = token;
-		token = strtok(NULL, delim);
+		token = strtok_r(NULL, delim, &tokbuf);
 	}
 	return count;
 }
@@ -169,7 +170,7 @@ int fst_ini_config_get_group_ifaces(struct fst_ini_config *h,
 		return -1;
 	}
 	for (i = 0; i < cnt; i++) {
-		strncpy((*ifaces)[i].name, tokens[i], sizeof((*ifaces)[i].name));
+		os_strlcpy((*ifaces)[i].name, tokens[i], sizeof((*ifaces)[i].name));
 		if (fst_ini_config_read(h, (const char*)tokens[i], "priority",
 			buf, INI_MAX_STRING))
 			(*ifaces)[i].priority = strtoul(buf, NULL, 0);
@@ -212,7 +213,7 @@ int fst_ini_config_get_groups(struct fst_ini_config *h,
 	}
 
 	for (i = 0; i < cnt; i++) {
-		strncpy((*groups)[i].id, tokens[i], sizeof((*groups)[i].id));
+		os_strlcpy((*groups)[i].id, tokens[i], sizeof((*groups)[i].id));
 		fst_mgr_printf(MSG_DEBUG,"Config: group %s has been parsed", tokens[i]);
 	}
 	return cnt;

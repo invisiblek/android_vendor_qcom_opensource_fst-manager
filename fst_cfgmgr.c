@@ -130,8 +130,8 @@ static int enslave_device(int sock, const char *bond, const char *ifname)
 	}
 
 	/* Enslave the device */
-	strncpy(if_enslave.ifr_name, bond, IFNAMSIZ);
-	strncpy(if_enslave.ifr_slave, ifname, IFNAMSIZ);
+	os_strlcpy(if_enslave.ifr_name, bond, IFNAMSIZ);
+	os_strlcpy(if_enslave.ifr_slave, ifname, IFNAMSIZ);
 	if ((ioctl(sock, SIOCBONDENSLAVE, &if_enslave) < 0)) {
 			fst_mgr_printf(MSG_ERROR, "Error enslaving %s to %s: %s",
 				ifname, bond, strerror(errno));
@@ -158,8 +158,8 @@ static int release_device(int sock, const char *bond, const char *ifname)
 	}
 
 	/* Release the device */
-	strncpy(if_enslave.ifr_name, bond, IFNAMSIZ);
-	strncpy(if_enslave.ifr_slave, ifname, IFNAMSIZ);
+	os_strlcpy(if_enslave.ifr_name, bond, IFNAMSIZ);
+	os_strlcpy(if_enslave.ifr_slave, ifname, IFNAMSIZ);
 	if ((ioctl(sock, SIOCBONDRELEASE, &if_enslave) < 0)) {
 			fst_mgr_printf(MSG_ERROR, "Error releasing %s from %s: %s",
 				ifname, bond, strerror(errno));
@@ -206,7 +206,7 @@ static int do_bonding_operations(Boolean enslave)
 				groups[i].id);
 			continue;
 		}
-		if (fst_cfgmgr_get_mux_ifname(groups[i].id, buf, sizeof(buf)-1) < 0) {
+		if (fst_cfgmgr_get_mux_ifname(groups[i].id, buf, sizeof(buf)-1) <= 0) {
 			fst_mgr_printf(MSG_ERROR, "Cannot get mux name for %s",
 				groups[i].id);
 			goto error_muxname;
@@ -344,6 +344,9 @@ void fst_cfgmgr_deinit()
 		fst_ini_config_deinit(fstcfg.handle);
 		fstcfg.handle = NULL;
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		break;
 	}
 }
 
@@ -417,6 +420,10 @@ int fst_cfgmgr_get_iface_group_cipher(const struct fst_iface_info *iface,
 		res = fst_ini_config_get_iface_group_cipher(fstcfg.handle, iface,
 			buf, len);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -432,6 +439,10 @@ int fst_cfgmgr_get_iface_pairwise_cipher(const struct fst_iface_info *iface,
 	case FST_CONFIG_INI:
 		res = fst_ini_config_get_iface_pairwise_cipher(fstcfg.handle, iface,
 			buf, len);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
 		break;
 	}
 	return res;
@@ -449,6 +460,10 @@ int fst_cfgmgr_get_iface_hw_mode(const struct fst_iface_info *iface,
 		res = fst_ini_config_get_iface_hw_mode(fstcfg.handle, iface,
 			buf, len);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -464,6 +479,10 @@ int fst_cfgmgr_get_iface_channel(const struct fst_iface_info *iface,
 	case FST_CONFIG_INI:
 		res = fst_ini_config_get_iface_channel(fstcfg.handle, iface,
 			buf, len);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
 		break;
 	}
 	return res;
@@ -484,6 +503,10 @@ int fst_cfgmgr_on_iface_init(const struct fst_group_info *group,
 	case FST_CONFIG_INI:
 		res = fst_attach_iface(group, iface);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -496,6 +519,10 @@ int fst_cfgmgr_on_iface_deinit(struct fst_iface_info *iface)
 		break;
 	case FST_CONFIG_INI:
 		res = fst_detach_iface(iface);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
 		break;
 	}
 	return res;
@@ -526,6 +553,10 @@ int fst_cfgmgr_on_global_init(void)
 			fst_free(groups);
 		res = fst_rate_upgrade_init(fstcfg.handle);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -537,6 +568,9 @@ void fst_cfgmgr_on_global_deinit(void)
 		break;
 	case FST_CONFIG_INI:
 		fst_rate_upgrade_deinit();
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
 		break;
 	}
 }
@@ -552,6 +586,9 @@ int fst_cfgmgr_on_group_init(const struct fst_group_info *group)
 		if (fst_rate_upgrade_add_group(group))
 			return -1;
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		break;
 	}
 	return 0;
 }
@@ -565,6 +602,9 @@ int fst_cfgmgr_on_group_deinit(const struct fst_group_info *group)
 		if (fst_rate_upgrade_del_group(group))
 			return -1;
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		return -1;
 	}
 	return 0;
 }
@@ -580,6 +620,10 @@ int fst_cfgmgr_on_connect(struct fst_group_info *group, const char *iface,
 	case FST_CONFIG_INI:
 		res = fst_rate_upgrade_on_connect(group, iface, addr);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -594,6 +638,10 @@ int fst_cfgmgr_on_disconnect(struct fst_group_info *group, const char *iface,
 	case FST_CONFIG_INI:
 		res = fst_rate_upgrade_on_disconnect(group, iface, addr);
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -607,6 +655,10 @@ int fst_cfgmgr_get_mux_type(const char *gname, char *buf, int blen)
 		break;
 	case FST_CONFIG_INI:
 		res = fst_ini_config_get_mux_type(fstcfg.handle, gname, buf, blen);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
 		break;
 	}
 	return res;
@@ -629,6 +681,10 @@ int fst_cfgmgr_get_mux_ifname(const char *gname, char *buf, int blen)
 			res = os_strlen(buf);
 		}
 		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
 	}
 	return res;
 }
@@ -641,6 +697,10 @@ Boolean fst_cfgmgr_is_mux_managed(const char *gname)
 		res = FALSE;
 	case FST_CONFIG_INI:
 		res = fst_ini_config_is_mux_managed(fstcfg.handle, gname);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = FALSE;
 		break;
 	}
 	return res;

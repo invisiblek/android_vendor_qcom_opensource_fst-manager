@@ -157,7 +157,7 @@ static int peer_event_parser(char *str, void *data)
 			return -1;
 
 		if (!defstrcmp(str, FST_CEP_PNAME_IFNAME))
-			strncpy(ev->peer_state.ifname, p,
+			os_strlcpy(ev->peer_state.ifname, p,
 				sizeof(ev->peer_state.ifname));
 		else if (!defstrcmp(str, FST_CEP_PNAME_ADDR)) {
 			if (hwaddr_aton(p, ev->peer_state.addr))
@@ -218,6 +218,11 @@ static Boolean fst_ctrl_notify(char *buf, size_t len)
 
 	if (*p == '<' && (p = strchr(p, '>')))
 		p++;
+
+	if (p == NULL) {
+		fst_mgr_printf(MSG_ERROR, "Bad notification level format");
+		return FALSE;
+	}
 
 	if (!strncmp(p, WPA_EVENT_TERMINATING, sizeof(WPA_EVENT_TERMINATING) - 1)) {
 		fst_mgr_printf(MSG_ERROR, WPA_EVENT_TERMINATING
@@ -338,9 +343,9 @@ static int session_info_parser(char *str, void *data)
 			fst_mgr_printf(MSG_ERROR,
 				"bad peer address string \'%s\'", p);
 	} else if (!defstrcmp(str, FST_CSG_PNAME_NEW_IFNAME)) {
-		strncpy(si->new_ifname, p, sizeof(si->new_ifname));
+		os_strlcpy(si->new_ifname, p, sizeof(si->new_ifname));
 	} else if (!defstrcmp(str, FST_CSG_PNAME_OLD_IFNAME)) {
-		strncpy(si->old_ifname, p, sizeof(si->old_ifname));
+		os_strlcpy(si->old_ifname, p, sizeof(si->old_ifname));
 	} else if (!defstrcmp(str, FST_CSG_PNAME_LLT)) {
 		si->llt = strtoul(p, NULL, 0);
 	} else if (!defstrcmp(str, FST_CSG_PNAME_STATE)) {
@@ -482,17 +487,17 @@ int fst_get_peer_mbies(const struct fst_group_info *group,
 static int iface_parser(char *str, void *data)
 {
 	struct fst_iface_info *ii = data;
-	char *p, *e;
+	char *p, *e, *tokbuf;
 	const char delims[] = "|";
 
-	p = strtok(str, delims);
+	p = strtok_r(str, delims, &tokbuf);
 	if (!p) {
 		fst_mgr_printf(MSG_ERROR, "bad iface name reported \'%s\'", str);
 		return -1;
 	}
-	strncpy(ii->name, p, sizeof(ii->name));
+	os_strlcpy(ii->name, p, sizeof(ii->name));
 
-	p = strtok(NULL, delims);
+	p = strtok_r(NULL, delims, &tokbuf);
 	if (!p) {
 		fst_mgr_printf(MSG_ERROR, "bad iface address reported \'%s\'", str);
 		return -1;
@@ -503,7 +508,7 @@ static int iface_parser(char *str, void *data)
 		return -1;
 	}
 
-	p = strtok(NULL, delims);
+	p = strtok_r(NULL, delims, &tokbuf);
 	if (!p) {
 		fst_mgr_printf(MSG_ERROR, "bad iface priority reported \'%s\'", str);
 		return -1;
@@ -514,7 +519,7 @@ static int iface_parser(char *str, void *data)
 		return -1;
 	}
 
-	p = strtok(NULL, delims);
+	p = strtok_r(NULL, delims, &tokbuf);
 	if (!p) {
 		fst_mgr_printf(MSG_ERROR, "bad iface llt reported \'%s\'", str);
 		return -1;
@@ -557,7 +562,7 @@ int fst_attach_iface(const struct fst_group_info *group,
 
 static int group_id_parser(char *str, void *data)
 {
-	strncpy(((struct fst_group_info *)data)->id, str,
+	os_strlcpy(((struct fst_group_info *)data)->id, str,
 		sizeof(((struct fst_group_info *) data)->id));
 	return 0;
 }
@@ -591,7 +596,7 @@ Boolean fst_is_supplicant(void)
 	if (strncmp(buf, "BAD", 3) && strncmp(buf, "FAI", 3))
 		return TRUE;
 	else
-		return FALSE; 
+		return FALSE;
 }
 static int fst_dup_ap_wpa_psk(const char *master,
 	const struct fst_iface_info *iface)

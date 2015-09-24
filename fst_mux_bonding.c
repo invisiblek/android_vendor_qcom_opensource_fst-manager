@@ -162,7 +162,7 @@ static int _mux_bond_assign_queue_id(struct fst_mux *ctx,
 {
 	FILE *f;
 	char fname[256];
-	sprintf(fname, BOND_SYSFS_ROOT "/%s/" BOND_SYSFS_QUEUEID,
+	snprintf(fname, sizeof(fname), BOND_SYSFS_ROOT "/%s/" BOND_SYSFS_QUEUEID,
 			ctx->bond_ifname);
 	f = fopen(fname, "w");
 	if (!f) {
@@ -343,7 +343,7 @@ int fst_mux_start(struct fst_mux *ctx)
 		}
 	}
 
-	if (fst_tc_start(ctx->tc, ctx->bond_ifname)) {
+	if (fst_tc_start(ctx->tc, ctx->bond_ifname) != 0) {
 		fst_mgr_printf(MSG_ERROR, "Cannot start FST TC bond#%s",
 			ctx->bond_ifname);
 		goto fail;

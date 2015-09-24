@@ -763,9 +763,9 @@ int fst_tc_start(struct fst_tc *f, const char *ifname)
 	if (!ifname || f->ifidx != IF_INDEX_NONE)
 		return -1;
 
-	strncpy(f->ifname, ifname, sizeof(f->ifname));
+	os_strlcpy(f->ifname, ifname, sizeof(f->ifname));
 
-	if (fst_tc_get_iface_idxs(f)) {
+	if (fst_tc_get_iface_idxs(f) != 0) {
 		fst_mgr_printf(MSG_ERROR, "Cannot get iface indexes for bond#%s",
 			ifname);
 		goto fail_get_iface_idxs;
@@ -883,7 +883,7 @@ int fst_tc_add_l2da_filter(struct fst_tc *f, const uint8_t * mac, int queue_id,
 	}
 	res = fst_tc_modify_rx_mc_filters(f, 1, mac, ifname,
 		filter_handle->prio);
-	if (res)  {
+	if (res != 0)  {
 		fst_mgr_printf(MSG_ERROR, "%s: cannot add RX MC filter",
 			ifname);
 		goto rx_mc_filter_fail;
@@ -915,7 +915,7 @@ int fst_tc_del_l2da_filter(struct fst_tc *f,
 	}
 
 	if (fst_tc_modify_rx_mc_filters(f, 0, NULL, filter_handle->ifname,
-		filter_handle->prio)) {
+		filter_handle->prio) != 0) {
 		fst_mgr_printf(MSG_ERROR, "%s: cannot del MC RX filter#%u",
 			filter_handle->ifname, filter_handle->prio);
 		res = -1;

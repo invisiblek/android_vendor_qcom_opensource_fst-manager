@@ -37,7 +37,8 @@
 
 enum fst_config_method {
 	FST_CONFIG_CLI,
-	FST_CONFIG_INI
+	FST_CONFIG_INI,
+	FST_CONFIG_MAX
 };
 
 

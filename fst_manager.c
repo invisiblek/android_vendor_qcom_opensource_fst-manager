@@ -222,7 +222,7 @@ static int _fst_mgr_session_set_peer_addr(struct fst_mgr_session *s,
 	if (!s->non_compliant) {
 		char pval[] = "XX:XX:XX:XX:XX:XX";
 
-		sprintf(pval, MACSTR, MAC2STR(addr));
+		snprintf(pval, sizeof(pval), MACSTR, MAC2STR(addr));
 
 		if (fst_session_set(s->id, FST_CSS_PNAME_OLD_PEER_ADDR, pval)) {
 			fst_mgr_printf(MSG_ERROR, "session %u: cannot set old addr to %s",
@@ -247,7 +247,7 @@ static int _fst_mgr_session_set_llt(struct fst_mgr_session *s,
 	if (!s->non_compliant) {
 		char pval[32];
 
-		sprintf(pval, "%u", llt);
+		snprintf(pval, sizeof(pval), "%u", llt);
 
 		if (fst_session_set(s->id, FST_CSS_PNAME_LLT, pval)) {
 			fst_mgr_printf(MSG_ERROR, "session %u: cannot set LLT to %s",
@@ -482,7 +482,8 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 
 	_fst_mgr_peer_check_compliance(p);
 
-	if ((new_i = _fst_mgr_peer_get_next_iface(p)) == NULL) {
+	new_i = _fst_mgr_peer_get_next_iface(p);
+	if (new_i == NULL) {
 		fst_mgr_printf(MSG_WARNING,
 						"peer " MACSTR ": Cannot initiate next setup: "
 						"no backup iface connected",
@@ -817,7 +818,7 @@ static int _fst_mgr_group_init(struct fst_mgr *mgr,
 			goto error_iface;
 		}
 
-	if (fst_mux_start(drv)) {
+	if (fst_mux_start(drv) != 0) {
 		fst_mgr_printf(MSG_ERROR, "Cannot start driver for group %s",
 				ginfo->id);
 		goto error_drv_start;
@@ -1239,15 +1240,22 @@ static void _fst_mgr_ctrl_notification_cb_func(void *cb_ctx,
 
 	switch (event_type) {
 	case EVENT_FST_ESTABLISHED:
-		fst_mgr_printf(MSG_WARNING, "session %u: established (initiator)",
-				session_id);
-		s->state = FST_MGR_SESSION_STATE_ESTABLISHED;
+		if (s != NULL) {
+			fst_mgr_printf(MSG_WARNING, "session %u: established (initiator)",
+					session_id);
+			s->state = FST_MGR_SESSION_STATE_ESTABLISHED;
+		}
+		else
+			fst_mgr_printf(MSG_ERROR, "Cannot find session object");
 		break;
 	case EVENT_FST_SETUP:
 		_fst_mgr_on_setup(mgr, session_id);
 		break;
 	case EVENT_FST_SESSION_STATE_CHANGED:
-		_fst_mgr_on_ctrl_notification_state_change(mgr, g, s, extra);
+		if (g != NULL && s != NULL)
+			_fst_mgr_on_ctrl_notification_state_change(mgr, g, s, extra);
+		else
+			fst_mgr_printf(MSG_ERROR, "Cannot find group/session object");
 		break;
 	case EVENT_PEER_STATE_CHANGED:
 		_fst_mgr_on_peer_state_changed(mgr, extra);
@@ -1268,14 +1276,14 @@ static int            g_fst_mgr_initalized = 0;
 int fst_manager_init(void)
 {
 	int res, i, nof_groups;
-	struct fst_group_info *groups;
+	struct fst_group_info *groups = NULL;
 
 	os_memset(&g_fst_mgr, 0, sizeof(g_fst_mgr));
 
 	dl_list_init(&g_fst_mgr.groups);
 
 	res = fst_set_notify_cb(_fst_mgr_ctrl_notification_cb_func, &g_fst_mgr);
-	if (res) {
+	if (res != 0) {
 		goto finish;
 	}
 

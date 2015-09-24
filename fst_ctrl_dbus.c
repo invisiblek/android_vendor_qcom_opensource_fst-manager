@@ -582,7 +582,7 @@ int fst_get_groups(struct fst_group_info **groups)
 				sizeof(WPAS_DBUS_NEW_PATH_FST) +
 				sizeof(WPAS_DBUS_NEW_FST_GROUPS_PART);
 		fst_mgr_printf(MSG_DEBUG, " path#%zd: %s (group=%s)", i, strv[i], group_id);
-		strncpy(info->id, group_id, sizeof(info->id));
+		os_strlcpy(info->id, group_id, sizeof(info->id));
 	}
 
 	res = len;
@@ -645,7 +645,7 @@ int fst_get_group_ifaces(const struct fst_group_info *group,
 		if (!proxy)
 			goto out;
 
-		strncpy(info->name, ifname, sizeof(info->name));
+		os_strlcpy(info->name, ifname, sizeof(info->name));
 
 		pvalue = proxy_get_typed_property(proxy,
 				FST_DBUS_IFACE_PROP_LLT,
