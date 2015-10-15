@@ -469,20 +469,22 @@ static int parse_peer_mbies(char *buf, void *data)
 {
 	char **mbies = data;
 
-	*mbies = NULL;
+	if (data != NULL)
+		*mbies = NULL;
 
 	if (!strncmp(buf, "FAIL", 4))
 		return -EINVAL;
 
-	*mbies = os_strdup(buf);
-	if (!*mbies)
-		return -ENOMEM;
+	if (data != NULL) {
+		*mbies = os_strdup(buf);
+		if (!*mbies)
+			return -ENOMEM;
+	}
 
-	return os_strlen(*mbies);
+	return os_strlen(buf);
 }
 
-int fst_get_peer_mbies(const struct fst_group_info *group,
-	struct fst_iface_info *iface, uint8_t *peer, char **mbies)
+int fst_get_peer_mbies(struct fst_iface_info *iface, uint8_t *peer, char **mbies)
 {
 	return do_command(parse_peer_mbies, mbies, FST_CMD_GET_PEER_MBIES " %s "
 			  MACSTR, iface->name, MAC2STR(peer));
@@ -938,7 +940,7 @@ static int fst_dup_station(const char *master,
 
 error_set:
 	if (netid  != -1) {
-		fst_disconnect_iface(iface);
+		fst_dedup_connection(iface);
 	}
 error_add_network:
 error_no_netid:
@@ -956,7 +958,7 @@ int fst_dup_connection(const struct fst_iface_info *iface,
 	return res;
 }
 
-int fst_disconnect_iface(const struct fst_iface_info *iface)
+int fst_dedup_connection(const struct fst_iface_info *iface)
 {
 	if ( fst_is_supplicant()) {
 		return(do_command_ex(NULL, NULL,

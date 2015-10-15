@@ -195,7 +195,7 @@ int fst_rate_upgrade_on_connect(const struct fst_group_info *group,
 
 error_connect:
 	while(i-- > 0) {
-		fst_disconnect_iface(&g->slaves[i]);
+		fst_dedup_connection(&g->slaves[i]);
 	}
 	return -1;
 }
@@ -208,7 +208,7 @@ int fst_rate_upgrade_on_disconnect(const struct fst_group_info *group,
 	g = find_rate_upgrade_group(group->id);
 	if (g && strncmp(iface, g->master, strlen(iface)) == 0) {
 		for (i = 0; i < g->slave_cnt; i++) {
-			if (fst_disconnect_iface(&g->slaves[i])) {
+			if (fst_dedup_connection(&g->slaves[i])) {
 				fst_mgr_printf(MSG_ERROR, "Cannot disconnect iface %s",
 				g->slaves[i].name);
 				res = -1;
