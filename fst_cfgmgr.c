@@ -80,6 +80,24 @@ static int set_iface_flags(int sock, const char *ifname, short int flags)
 	return 0;
 }
 
+static int set_iface_txqueuelen(int sock, const char *ifname, int txqueuelen)
+{
+	struct ifreq ifr;
+
+	os_memset(&ifr, 0, sizeof(ifr));
+	os_strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	ifr.ifr_qlen = txqueuelen;
+
+	fst_mgr_printf(MSG_INFO, "Setting %s txqueuelen %d", ifname, txqueuelen);
+
+	if (ioctl(sock, SIOCSIFTXQLEN, &ifr) != 0) {
+		fst_mgr_printf(MSG_ERROR, "Error setting interface %s txqueuelen", ifname);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int set_iface_up(int sock, const char *ifname, Boolean up)
 {
 	short int flags;
@@ -168,11 +186,29 @@ static int release_device(int sock, const char *bond, const char *ifname)
 	return 0;
 }
 
+static int fst_cfgmgr_get_txqueuelen(const char *gname)
+{
+	int res = -1;
+
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_txqueuelen(fstcfg.handle, gname);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		break;
+	}
+
+	return res;
+}
+
 static int do_bonding_operations(Boolean enslave)
 {
 	struct fst_group_info *groups;
 	struct fst_iface_info *ifaces;
-	int gcnt, icnt, muxtype, sock, i, j, res;
+	int gcnt, icnt, muxtype, sock, i, j, txqueuelen, res;
 	char buf[80];
 
 	if (fstcfg.handle == NULL) {
@@ -233,11 +269,19 @@ static int do_bonding_operations(Boolean enslave)
 				goto error_enslave;
 			}
 		}
+
+		txqueuelen = fst_cfgmgr_get_txqueuelen(groups[i].id);
+		if (txqueuelen >= 0) {
+			res = set_iface_txqueuelen(sock, buf, txqueuelen);
+			if (res != 0)
+				goto error_set_iface;
+		}
+
 		fst_mgr_printf(MSG_DEBUG, "Setting bonding iface %s %s",
 			buf, enslave ? "up":"down");
 		if (set_iface_up(sock, buf, enslave) < 0) {
 			fst_mgr_printf(MSG_ERROR, "Cannot set iface %s", buf);
-				goto error_set_iface;
+			goto error_set_iface;
 		}
 		free(ifaces);
 	}

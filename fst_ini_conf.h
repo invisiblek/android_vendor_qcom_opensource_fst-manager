@@ -66,6 +66,7 @@ int fst_ini_config_get_iface_hw_mode(struct fst_ini_config *h,
 	const struct fst_iface_info *iface, char *buf, int len);
 int fst_ini_config_get_iface_channel(struct fst_ini_config *h,
 	const struct fst_iface_info *iface, char *buf, int len);
+int fst_ini_config_get_txqueuelen(struct fst_ini_config *h, const char *gname);
 
 #endif /*  __FST_INI_CONF_H__ */
 
