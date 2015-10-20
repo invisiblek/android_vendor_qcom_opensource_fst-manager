@@ -939,9 +939,6 @@ static void _fst_mgr_on_peer_connected(struct fst_mgr *mgr,
 		return;
 	}
 
-	WPA_ASSERT(p != NULL);
-	WPA_ASSERT(p->session != NULL);
-
 	if(!_fst_mgr_peer_add_iface(p, i)) {
 		fst_mgr_printf(MSG_ERROR, "Peer interface allocation error");
 		return;
