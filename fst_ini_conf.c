@@ -319,3 +319,13 @@ int fst_ini_config_get_iface_channel(struct fst_ini_config *h,
 		return 0;
 	return strlen(buf);
 }
+
+int fst_ini_config_get_txqueuelen(struct fst_ini_config *h, const char *gname)
+{
+	char buf[INI_MAX_STRING + 1];
+
+	if (!fst_ini_config_read(h, gname, "txqueuelen", buf, INI_MAX_STRING))
+		return -1;
+
+	return atoi(buf);
+}
