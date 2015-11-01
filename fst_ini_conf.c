@@ -229,6 +229,16 @@ char *fst_ini_config_get_rate_upgrade_master(struct fst_ini_config *h,
 	return strdup(buf);
 }
 
+char *fst_ini_config_get_rate_upgrade_acl_fname(struct fst_ini_config *h,
+	const char *groupname)
+{
+	char buf[INI_MAX_STRING+1];
+	if(!fst_ini_config_read(h, groupname, "rate_upgrade_acl_file", buf,
+	   INI_MAX_STRING))
+		return NULL;
+	return strdup(buf);
+}
+
 int fst_ini_config_get_group_slave_ifaces(struct fst_ini_config *h,
 	const struct fst_group_info *group, const char *master,
 	struct fst_iface_info **ifaces)
