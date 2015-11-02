@@ -69,6 +69,8 @@ int fst_ini_config_get_iface_hw_mode(struct fst_ini_config *h,
 int fst_ini_config_get_iface_channel(struct fst_ini_config *h,
 	const struct fst_iface_info *iface, char *buf, int len);
 int fst_ini_config_get_txqueuelen(struct fst_ini_config *h, const char *gname);
+int fst_ini_config_get_slave_ctrl_interface(struct fst_ini_config *h,
+	char *buf, int len);
 
 #endif /*  __FST_INI_CONF_H__ */
 

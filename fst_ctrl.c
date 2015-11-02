@@ -53,6 +53,13 @@
 #include "fst_ctrl.h"
 #include "fst_cfgmgr.h"
 
+#ifndef DEFAULT_WPAS_CLI_DIR
+#define DEFAULT_WPAS_CLI_DIR "/var/run/wpa_supplicant"
+#endif
+#ifndef DEFAULT_HAPD_CLI_DIR
+#define DEFAULT_HAPD_CLI_DIR "/var/run/hostapd"
+#endif
+
 static struct wpa_ctrl *ctrl_evt;
 static struct wpa_ctrl *ctrl_cmd;
 static unsigned int     ctrl_ping_interval;
@@ -770,16 +777,19 @@ error_getconfig:
 }
 
 int fst_add_iface(const char *master, const struct fst_iface_info *iface,
-	const char *acl_file)
+	const char *acl_file, const char *ctrl_interface)
 {
 	int res;
 	if (fst_is_supplicant()) {
+		/* INTERFACE_ADD <ifname>TAB<confname>TAB<driver>TAB<ctrl_interface> */
 		res = do_command_ex(NULL, NULL, "INTERFACE_ADD",
-			" %s", iface->name);
+			" %s\t\t\t%s", iface->name,
+			ctrl_interface ? ctrl_interface : DEFAULT_WPAS_CLI_DIR);
 	}
 	else {
-		res = do_command_ex(NULL, NULL, "ADD", " %s " CONFIG_CTRL_IFACE_DIR,
-			iface->name);
+		res = do_command_ex(NULL, NULL, "ADD", " %s %s",
+			iface->name,
+			ctrl_interface ? ctrl_interface : DEFAULT_HAPD_CLI_DIR);
 		if (res < 0) {
 			fst_mgr_printf(MSG_ERROR, "Failed add AP iface %s",
 			iface->name);

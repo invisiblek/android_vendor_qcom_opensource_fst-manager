@@ -339,3 +339,10 @@ int fst_ini_config_get_txqueuelen(struct fst_ini_config *h, const char *gname)
 
 	return atoi(buf);
 }
+
+int fst_ini_config_get_slave_ctrl_interface(struct fst_ini_config *h, char *buf, int len)
+{
+	if(!fst_ini_config_read(h, "fst_manager", "slave_ctrl_iface_dir", buf, len))
+		return 0;
+	return strlen(buf);
+}
