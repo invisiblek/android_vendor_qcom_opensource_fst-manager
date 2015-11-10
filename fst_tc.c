@@ -95,9 +95,9 @@ static u16 fst_tc_get_lowest_unused_prio(struct fst_tc *f)
 {
 	struct fst_tc_filter_handle *h;
 	u16 prio;
-	int avail = 0;
+	int avail;
 
-	for (prio = PRIO_BOND_TX_BASE; !avail && prio < PRIO_MAX; prio++) {
+	for (prio = PRIO_BOND_TX_BASE; prio < PRIO_MAX; prio++) {
 		avail = 1;
 		dl_list_for_each(h, &f->filters, struct fst_tc_filter_handle,
 			filters_lentry) {
@@ -106,6 +106,8 @@ static u16 fst_tc_get_lowest_unused_prio(struct fst_tc *f)
 				break;
 			}
 		}
+		if (avail)
+			break;
 	}
 
 	return prio;
