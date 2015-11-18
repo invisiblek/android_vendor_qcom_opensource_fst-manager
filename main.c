@@ -35,6 +35,7 @@
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
+#include <signal.h>
 
 #include "utils/common.h"
 #include "utils/os.h"
@@ -58,15 +59,21 @@ unsigned int fst_debug_level = MSG_INFO;
 unsigned int fst_num_of_retries = 3;
 unsigned int fst_ping_interval = 1;
 Boolean      fst_force_nc = FALSE;
-Boolean      fst_main_do_loop = FALSE;
-volatile Boolean terminate_signalled = FALSE;
+static Boolean fst_main_do_loop = FALSE;
+static Boolean fst_continuous_loop = FALSE;
+static Boolean terminate_signalled = FALSE;
 
-static void fst_manager_terminate(int sig, void *signal_ctx)
+static void fst_manager_signal_terminate(int sig)
 {
 	fst_mgr_printf(MSG_INFO, "termination signal arrived (%d)",
 			sig);
 	terminate_signalled = TRUE;
+}
+
+static void fst_manager_eloop_terminate(int sig, void *signal_ctx)
+{
 	eloop_terminate();
+	fst_manager_signal_terminate(sig);
 }
 
 static void usage(const char *prog)
@@ -74,8 +81,11 @@ static void usage(const char *prog)
 	printf("Usage: %s [options] [<ctrl_interace_name>]\n", prog);
 	printf(", where options are:\n"
 	       "\t--version, -V       - show version.\n"
-	       "\t--daemon, -B        - run in daemon mode\n"
-               "\t--config, -c <file> - read the FST configuration from the file\n"
+	       "\t--daemon, -B        - run in daemon mode. Exit after "
+			"wpa_supplicant/hostapd quits\n"
+	       "\t--daemonex, -b      - continuous daemon mode. Wait for a next "
+			"wpa_supplicant/hostapd\n"
+	       "\t--config, -c <file> - read the FST configuration from the file\n"
 	       "\t--retries -r <int>  - number of session setup retries.\n"
 	       "\t--ping-int -p <int> - CLI ping interval in sec, 0 to disable\n"
 	       "\t--force-nc -n       - force non-compliant mode.\n"
@@ -100,7 +110,7 @@ void main_loop(const char *ctrl_iface)
 		goto error_fst_manager_init;
 	}
 
-	if (eloop_register_signal_terminate(fst_manager_terminate, NULL)) {
+	if (eloop_register_signal_terminate(fst_manager_eloop_terminate, NULL)) {
 		fst_mgr_printf(MSG_ERROR, "eloop_register_signal_terminate");
 		goto error_eloop_register_signal_terminate;
 	}
@@ -108,7 +118,8 @@ void main_loop(const char *ctrl_iface)
 	eloop_run();
 
 	fst_mgr_printf(MSG_INFO, "eloop finished");
-	terminate_signalled = TRUE;
+	if (!fst_continuous_loop)
+		fst_main_do_loop = FALSE;
 
 error_eloop_register_signal_terminate:
 	fst_manager_deinit();
@@ -123,6 +134,7 @@ int main(int argc, char *argv[])
 	const struct option long_opts[] = {
 		{"version",  no_argument, NULL, 'V'},
 		{"daemon",   no_argument, NULL, 'B'},
+		{"daemonex", no_argument, NULL, 'b'},
 		{"config",   required_argument, NULL, 'c'},
 		{"retries",  required_argument, NULL, 'r'},
 		{"ping-int",  required_argument, NULL, 'p'},
@@ -134,7 +146,7 @@ int main(int argc, char *argv[])
 		{NULL}
 	};
 	int res = -1;
-	char short_opts[] = "VBc:r:nd::f:uh";
+	char short_opts[] = "VBbc:r:nd::f:uh";
 	const char *ctrl_iface = NULL;
 	char *fstman_config_file = NULL;
 	int opt, i;
@@ -150,6 +162,10 @@ int main(int argc, char *argv[])
 			break;
 		case 'B':
 			fst_main_do_loop = TRUE;
+			break;
+		case 'b':
+			fst_main_do_loop = TRUE;
+			fst_continuous_loop = TRUE;
 			break;
 		case 'c':
 			if (fstman_config_file != NULL) {
@@ -231,10 +247,14 @@ int main(int argc, char *argv[])
 		goto error_eloop_init;
 	}
 
+	signal(SIGINT, fst_manager_signal_terminate);
+	signal(SIGTERM, fst_manager_signal_terminate);
 	while (TRUE) {
 		main_loop(ctrl_iface);
 		if (!fst_main_do_loop || terminate_signalled)
 			break;
+		signal(SIGINT, fst_manager_signal_terminate);
+		signal(SIGTERM, fst_manager_signal_terminate);
 		os_sleep(DEFAULT_FST_INIT_RETRY_PERIOD_SEC, 0);
 	}
 
