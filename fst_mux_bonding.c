@@ -231,6 +231,12 @@ static int _drv_del_filter(struct fst_mux *ctx, struct fst_mux_filter *filter,
 	}
 
 	dl_list_del(&filter->lentry);
+
+	/* STA can only have 1 peer (AP), so it should have no filters
+	 * installed after we removed the previous one */
+	WPA_ASSERT(!fst_is_supplicant() ||
+		   dl_list_empty(&filter->iface->filters));
+
 	os_free(filter);
 
 	return 0;
@@ -306,7 +312,7 @@ struct fst_mux *fst_mux_init(const char *group_name)
 		goto fail_connect;
 	}
 
-	ctx->tc = fst_tc_create();
+	ctx->tc = fst_tc_create(fst_is_supplicant());
 	if (!ctx->tc) {
 		fst_mgr_printf(MSG_ERROR, "Cannot create FST TC bond#%s",
 			ctx->bond_ifname);

@@ -87,6 +87,7 @@ struct fst_tc {
 	struct nl_sock *nl;
 	char ifname[IFNAMSIZ];
 	int ifidx;
+	Boolean is_sta;
 	struct dl_list ifaces;
 	struct dl_list filters;
 };
@@ -315,8 +316,6 @@ static void tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
 	const char qdisc_action[] = "skbedit";
 	if (add) {
 		struct tc_l2da_filter_modify_ctx *c = ctx;
-		uint32_t mac32;
-		uint16_t mac16;
 		struct {
 			struct tc_u32_sel sel;
 			struct tc_u32_key keys[2];
@@ -326,22 +325,39 @@ static void tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
 		memset(&sel, 0, sizeof(sel));
 		memset(&skbsel, 0, sizeof(skbsel));
 
-		mac16 = ((uint16_t) c->mac[0] << 8) | c->mac[1];
-		mac32 = ((uint32_t) c->mac[2] << 24) |
-			((uint32_t) c->mac[3] << 16) |
-			((uint32_t) c->mac[4] << 8) |
-			c->mac[5];
+		if (c->mac) {
+			uint32_t mac32;
+			uint16_t mac16;
 
-		sel.keys[0].val = htonl(mac32);
-		sel.keys[0].mask = htonl((uint32_t) 0xFFFFFFFF);
-		sel.keys[0].off = -12;
-		sel.keys[0].offmask = 0;
-		sel.keys[1].val = htonl((uint32_t) mac16);
-		sel.keys[1].mask = htonl((uint32_t) 0xFFFF);
-		sel.keys[1].off = -16;
-		sel.keys[1].offmask = 0;
-		sel.sel.flags |= TC_U32_TERMINAL;
-		sel.sel.nkeys = 2;
+			mac16 = ((uint16_t) c->mac[0] << 8) | c->mac[1];
+			mac32 = ((uint32_t) c->mac[2] << 24) |
+				((uint32_t) c->mac[3] << 16) |
+				((uint32_t) c->mac[4] << 8) |
+				c->mac[5];
+
+			sel.keys[0].val = htonl(mac32);
+			sel.keys[0].mask = htonl((uint32_t) 0xFFFFFFFF);
+			sel.keys[0].off = -12;
+			sel.keys[0].offmask = 0;
+			sel.keys[1].val = htonl((uint32_t) mac16);
+			sel.keys[1].mask = htonl((uint32_t) 0xFFFF);
+			sel.keys[1].off = -16;
+			sel.keys[1].offmask = 0;
+			sel.sel.flags |= TC_U32_TERMINAL;
+			sel.sel.nkeys = 2;
+		}
+		else {
+			/* NOTE: NULL mac means filter all packets. This is
+			 *       achieved by ((h_proto & 0) == 0) which is
+			 *       always true.
+			 */
+			sel.keys[0].val = 0;
+			sel.keys[0].mask = 0;
+			sel.keys[0].off = -2; /* h_proto */
+			sel.keys[0].offmask = 0;
+			sel.sel.flags |= TC_U32_TERMINAL;
+			sel.sel.nkeys = 1;
+		}
 
 		struct nlattr *t_opt, *t_act, *t_1, *t_act_opt;
 
@@ -377,10 +393,14 @@ static int tc_l2da_filter_modify(struct fst_tc *f, unsigned add,
 			"%s: cannot %s L2DA filter#%u",
 			f->ifname, add ? "add" : "remove",
 			prio);
-	else if (add)
+	else if (add && mac)
 		fst_mgr_printf(MSG_DEBUG,
 				"%s: L2DA filter#%u for " MACSTR " added",
 				f->ifname, prio, MAC2STR(mac));
+	else if (add)
+		fst_mgr_printf(MSG_DEBUG,
+				"%s: L2DA filter#%u (universal) added",
+				f->ifname, prio);
 	else
 		fst_mgr_printf(MSG_DEBUG,
 				"%s: L2DA filter#%u removed",
@@ -720,7 +740,7 @@ static int fst_tc_modify_rx_eapol_filters(struct fst_tc *f, unsigned add)
 	return 0;
 }
 
-struct fst_tc *fst_tc_create(void)
+struct fst_tc *fst_tc_create(Boolean is_sta)
 {
 	struct fst_tc *f;
 	int res;
@@ -749,6 +769,7 @@ struct fst_tc *fst_tc_create(void)
 
 	dl_list_init(&f->ifaces);
 	dl_list_init(&f->filters);
+	f->is_sta = is_sta;
 
 	return f;
 
@@ -782,28 +803,42 @@ int fst_tc_start(struct fst_tc *f, const char *ifname)
 		goto fail_add_muliq;
 	}
 
-	if (tc_mc_filter_modify(f, 1)) {
-		fst_mgr_printf(MSG_ERROR, "Cannot set MC filter");
-		goto fail_l2mc_filter;
-	}
+	if (!f->is_sta) {
+		/* AP can have multiple STAs connected over multiple interfaces.
+		 * Thus it needs to duplicate multicast frames to all interfaces
+		 * to make sure that all the STAs receive it, no matter which
+		 * interfaces are currently to which STA.
+		 */
+		if (tc_mc_filter_modify(f, 1)) {
+			fst_mgr_printf(MSG_ERROR, "Cannot set MC filter");
+			goto fail_l2mc_filter;
+		}
+	} else {
+		/* STA can only be connected to one AP, so there's no need for
+		 * duplication. However, it has to de-duplicate RX in order to
+		 * drop out packets sent by AP over inactive interface(s) due to
+		 * AP side duplication.
+		 */
+		if (fst_tc_add_ingress_qdisc(f)) {
+			fst_mgr_printf(MSG_ERROR, "Cannot add ingress qdisc for bond#%s",
+				ifname);
+			goto fail_add_ingress;
+		}
 
-	if (fst_tc_add_ingress_qdisc(f)) {
-		fst_mgr_printf(MSG_ERROR, "Cannot add ingress qdisc for bond#%s",
-			ifname);
-		goto fail_add_ingress;
-	}
-
-	if (fst_tc_modify_rx_eapol_filters(f, 1)) {
-		fst_mgr_printf(MSG_ERROR, "Cannot add RX EAPOL filter");
-		goto fail_add_rx_eapol_filter;
+		if (fst_tc_modify_rx_eapol_filters(f, 1)) {
+			fst_mgr_printf(MSG_ERROR, "Cannot add RX EAPOL filter");
+			goto fail_add_rx_eapol_filter;
+		}
 	}
 
 	return 0;
 
 fail_add_rx_eapol_filter:
-	fst_tc_del_ingress_qdisc(f);
+	if (f->is_sta)
+		fst_tc_del_ingress_qdisc(f);
 fail_add_ingress:
-	tc_mc_filter_modify(f, 0);
+	if (!f->is_sta)
+		tc_mc_filter_modify(f, 0);
 fail_l2mc_filter:
 	fst_tc_del_multiq_qdisc(f);
 fail_add_muliq:
@@ -815,9 +850,12 @@ fail_get_iface_idxs:
 
 void fst_tc_stop(struct fst_tc *f)
 {
-	fst_tc_modify_rx_eapol_filters(f, 0);
-	fst_tc_del_ingress_qdisc(f);
-	tc_mc_filter_modify(f, 0);
+	if (f->is_sta) {
+		fst_tc_modify_rx_eapol_filters(f, 0);
+		fst_tc_del_ingress_qdisc(f);
+	}
+	else
+		tc_mc_filter_modify(f, 0);
 	fst_tc_del_multiq_qdisc(f);
 	f->ifidx = IF_INDEX_NONE;
 	memset(f->ifname, 0, sizeof(f->ifname));
@@ -877,18 +915,47 @@ int fst_tc_add_l2da_filter(struct fst_tc *f, const uint8_t * mac, int queue_id,
 		goto get_avail_prio_fail;
 	}
 
-	res = tc_l2da_filter_modify(f, 1, mac, queue_id, filter_handle->prio);
-	if (res) {
-		fst_mgr_printf(MSG_ERROR, "%s: cannot add UC filter for " MACSTR,
-			ifname, MAC2STR(mac));
-		goto l2da_filter_fail;
+	if (!f->is_sta) {
+		/* AP:
+		 * - can have many peers (STAs) connected and, in turn, filters
+		 * - traffic should be redirected on per-STA basis
+		 * - shouldn't de-duplicate RX, as STAs don't duplicate it
+		 */
+
+		res = tc_l2da_filter_modify(f, 1, mac, queue_id,
+			filter_handle->prio);
+		if (res) {
+			fst_mgr_printf(MSG_ERROR, "%s: cannot add UC filter for " MACSTR,
+				ifname, MAC2STR(mac));
+			goto l2da_filter_fail;
+		}
 	}
-	res = fst_tc_modify_rx_mc_filters(f, 1, mac, ifname,
-		filter_handle->prio);
-	if (res != 0)  {
-		fst_mgr_printf(MSG_ERROR, "%s: cannot add RX MC filter",
-			ifname);
-		goto rx_mc_filter_fail;
+	else {
+		/* STA:
+		 * - only has 1 peer (AP), so it should only have one filter
+		 *   installed
+		 * - all the traffic should be redirected to the active
+		 *   interface (NULL indicates this).
+		 * - should de-duplicate RX, as AP duplicates it
+		 */
+
+		WPA_ASSERT(filter_handle->prio == PRIO_BOND_TX_BASE);
+
+		res = tc_l2da_filter_modify(f, 1, NULL, queue_id,
+			filter_handle->prio);
+		if (res) {
+			fst_mgr_printf(MSG_ERROR, "%s: cannot add universal filter",
+				ifname);
+			goto l2da_filter_fail;
+		}
+
+		res = fst_tc_modify_rx_mc_filters(f, 1, mac, ifname,
+			filter_handle->prio);
+		if (res != 0)  {
+			fst_mgr_printf(MSG_ERROR, "%s: cannot add RX MC filter",
+				ifname);
+			goto rx_mc_filter_fail;
+		}
 	}
 
 	os_strlcpy(filter_handle->ifname, ifname,
@@ -898,7 +965,8 @@ int fst_tc_add_l2da_filter(struct fst_tc *f, const uint8_t * mac, int queue_id,
 	return 0;
 
 rx_mc_filter_fail:
-	tc_l2da_filter_modify(f, 0, NULL, 0, filter_handle->prio);
+	if (f->is_sta)
+		tc_l2da_filter_modify(f, 0, NULL, 0, filter_handle->prio);
 l2da_filter_fail:
 get_avail_prio_fail:
 	os_memset(filter_handle, 0, sizeof(*filter_handle));
@@ -916,8 +984,8 @@ int fst_tc_del_l2da_filter(struct fst_tc *f,
 		res = -1;
 	}
 
-	if (fst_tc_modify_rx_mc_filters(f, 0, NULL, filter_handle->ifname,
-		filter_handle->prio) != 0) {
+	if (f->is_sta && fst_tc_modify_rx_mc_filters(f, 0, NULL,
+		filter_handle->ifname, filter_handle->prio) != 0) {
 		fst_mgr_printf(MSG_ERROR, "%s: cannot del MC RX filter#%u",
 			filter_handle->ifname, filter_handle->prio);
 		res = -1;

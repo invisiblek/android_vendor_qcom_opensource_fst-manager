@@ -33,9 +33,11 @@
 #ifndef __FST_TC_H__
 #define __FST_TC_H__
 
+#include "common/defs.h"
+
 struct fst_tc;
 
-struct fst_tc * fst_tc_create(void);
+struct fst_tc * fst_tc_create(Boolean is_sta);
 int fst_tc_start(struct fst_tc *f, const char *ifname);
 void fst_tc_stop(struct fst_tc *f);
 void fst_tc_delete(struct fst_tc *f);
