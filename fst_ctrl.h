@@ -154,8 +154,10 @@ Boolean fst_is_supplicant(void);
  * fst_add_iface - Add interfaces to Hostap
  * @master: Master interface name
  * @iface: Interface name
+ * @acl_file: ACL file name for accept_mac_file (see hostapd.conf), can be NULL
  */
-int fst_add_iface(const char *master, const struct fst_iface_info *iface);
+int fst_add_iface(const char *master, const struct fst_iface_info *iface,
+	const char *acl_file);
 
 /**
  * fst_del_iface - Delete interface from Hostap
@@ -169,15 +171,17 @@ int fst_del_iface(const struct fst_iface_info *iface);
  * @iface: Interface info for the interface to connect
  * @master: Master interface name the connection parameters to be copied from
  * @addr: Address (BSSID) to connect to
+ * @acl_file: ACL file name for accept_mac_file (see hostapd.conf), can be NULL
  */
 int fst_dup_connection(const struct fst_iface_info *iface,
-	const char *master, const u8 *addr);
+	const char *master, const u8 *addr, const char *acl_file);
 
 /**
  * fst_dedup_connection - Disconnects the interface
  * @iface: Interface
+ * @acl_file: ACL file name accept_mac_file (see hostapd.conf), can be NULL
 */
-int fst_dedup_connection(const struct fst_iface_info *iface);
+int fst_dedup_connection(const struct fst_iface_info *iface, const char *acl_file);
 
 /**
  * fst_get_sessions - Iterate FST session within a group

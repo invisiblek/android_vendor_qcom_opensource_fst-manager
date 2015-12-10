@@ -692,8 +692,15 @@ static int fst_dup_ap_handle_config(const char *master,
 	return 0;
 }
 
-static int fst_dup_ap(const char *master,
-	const struct fst_iface_info *iface)
+static int fst_ap_update_acl_file(const struct fst_iface_info *iface,
+	const char *acl_file)
+{
+	return do_simple_command("IFNAME=%s SET accept_mac_file %s",
+		iface->name, acl_file);
+}
+
+static int fst_dup_ap_config(const char *master,
+	const struct fst_iface_info *iface, const char *acl_file)
 {
 	char buf[2048];
 	char cmd[256];
@@ -735,6 +742,20 @@ static int fst_dup_ap(const char *master,
 		}
 	}
 
+	if (acl_file) {
+		ret = do_simple_command("IFNAME=%s SET macaddr_acl 1", iface->name);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR, "Set macaddr_acl failed");
+			goto error_setconfig;
+		}
+
+		ret = fst_ap_update_acl_file(iface, acl_file);
+		if (ret < 0) {
+			fst_mgr_printf(MSG_ERROR, "Update acl file failed");
+			goto error_setconfig;
+		}
+	}
+
 	ret = do_simple_command("IFNAME=%s ENABLE", iface->name);
 	if (ret < 0) {
 		fst_mgr_printf(MSG_ERROR, "Enabling AP failed");
@@ -748,7 +769,8 @@ error_getconfig:
 	return -1;
 }
 
-int fst_add_iface(const char *master, const struct fst_iface_info *iface)
+int fst_add_iface(const char *master, const struct fst_iface_info *iface,
+	const char *acl_file)
 {
 	int res;
 	if (fst_is_supplicant()) {
@@ -763,7 +785,7 @@ int fst_add_iface(const char *master, const struct fst_iface_info *iface)
 			iface->name);
 			return -1;
 		}
-		res = fst_dup_ap(master, iface);
+		res = fst_dup_ap_config(master, iface, acl_file);
 		if (res < 0) {
 			fst_mgr_printf(MSG_ERROR, "fst_dup_ap failed");
 			fst_del_iface(iface);
@@ -783,6 +805,12 @@ int fst_del_iface(const struct fst_iface_info *iface)
 		res = do_command_ex(NULL, NULL, "REMOVE", " %s", iface->name);
 	}
 	return res;
+}
+
+static int fst_dedup_station(const struct fst_iface_info *iface)
+{
+	return do_command_ex(NULL, NULL, "IFNAME=", "%s REMOVE_NETWORK ALL",
+		iface->name);
 }
 
 static int fst_dup_station(const char *master,
@@ -939,9 +967,8 @@ static int fst_dup_station(const char *master,
 	return 0;
 
 error_set:
-	if (netid  != -1) {
-		fst_dedup_connection(iface);
-	}
+	if (netid  != -1)
+		fst_dedup_station(iface);
 error_add_network:
 error_no_netid:
 error_master_status:
@@ -949,25 +976,32 @@ error_master_status:
 }
 
 int fst_dup_connection(const struct fst_iface_info *iface,
-	const char *master, const u8 *addr)
+	const char *master, const u8 *addr, const char *acl_file)
 {
 	int res = 0;
 	if ( fst_is_supplicant()) {
 		res = fst_dup_station(master, iface, addr);
 	}
+	else {
+		if (acl_file && fst_ap_update_acl_file(iface, acl_file) < 0)
+			fst_mgr_printf(MSG_WARNING,
+			   "cannot update ACL file for %s", iface->name);
+	}
 	return res;
 }
 
-int fst_dedup_connection(const struct fst_iface_info *iface)
+int fst_dedup_connection(const struct fst_iface_info *iface, const char *acl_file)
 {
+	int res = 0;
 	if ( fst_is_supplicant()) {
-		return(do_command_ex(NULL, NULL,
-		   "IFNAME=", "%s REMOVE_NETWORK ALL", iface->name));
+		res = fst_dedup_station(iface);
 	}
 	else {
-		fst_mgr_printf(MSG_ERROR, "hostapd disconnect not yet supported");
-		return -1;
+		if (acl_file && fst_ap_update_acl_file(iface, acl_file) < 0)
+			fst_mgr_printf(MSG_WARNING,
+			   "cannot update ACL file for %s", iface->name);
 	}
+	return res;
 }
 
 void fst_free(void *p)

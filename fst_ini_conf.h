@@ -49,6 +49,8 @@ int fst_ini_config_get_groups(struct fst_ini_config *h,
 	struct fst_group_info **groups);
 char *fst_ini_config_get_rate_upgrade_master(struct fst_ini_config *h,
 	const char *groupname);
+char *fst_ini_config_get_rate_upgrade_acl_fname(struct fst_ini_config *h,
+	const char *groupname);
 int fst_ini_config_get_group_slave_ifaces(struct fst_ini_config *h,
 	const struct fst_group_info *group, const char *master,
 	struct fst_iface_info **ifaces);
