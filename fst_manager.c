@@ -1104,14 +1104,31 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 		break;
 	}
 
+	/* delete old session */
 	_fst_mgr_peer_session_deinit(p, TRUE);
+
 	if (evext->session_state.extra.to_initial.reason == REASON_STT)
 		retry_counter++;
 	else
 		retry_counter = 0;
-	if (evext->session_state.extra.to_initial.reason != REASON_SETUP &&
-	    retry_counter < fst_num_of_retries)
+
+	if (evext->session_state.extra.to_initial.reason == REASON_SETUP)
+		/* session requested by peer. We're done */
+		return;
+
+	/* session setup (initiate_next_setup) is invoked in following cases:
+	 * 1. following STT (retry)
+	 * 2. following other error cases like reject (TODO: should this be
+	      considered as retry???)
+	 * 3. following successful session switch
+	 */
+	if (retry_counter < fst_num_of_retries) {
+		fst_mgr_printf(MSG_INFO, "initiating setup. retry %d", retry_counter);
 		_fst_mgr_peer_try_to_initiate_next_setup(p, g);
+	} else {
+		fst_mgr_printf(MSG_INFO, "no more retries. give up");
+		retry_counter = 0;
+	}
 }
 
 static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
