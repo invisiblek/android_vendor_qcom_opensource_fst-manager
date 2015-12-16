@@ -170,6 +170,8 @@ int fst_rate_upgrade_add_group(const struct fst_group_info *group)
 	int i;
 	char *master = NULL;
 	char *acl_fname = NULL;
+	char ctrl_iface_dir[256];
+	int ctrl_iface_dir_len;
 
 	if (find_rate_upgrade_group(group->id)) {
 		fst_mgr_printf(MSG_WARNING, "Group %s already added", group->id);
@@ -223,10 +225,13 @@ int fst_rate_upgrade_add_group(const struct fst_group_info *group)
 		goto error_acl_file;
 	}
 
+	ctrl_iface_dir_len = fst_ini_config_get_slave_ctrl_interface(
+		g_rateupg_mgr.iniconf, ctrl_iface_dir, sizeof(ctrl_iface_dir));
 	for (i = 0; i < g->slave_cnt; i++) {
-		if (fst_add_iface(master, &ifaces[i], g->acl_fname)) {
+		if (fst_add_iface(master, &ifaces[i], g->acl_fname,
+				(ctrl_iface_dir_len > 0) ? ctrl_iface_dir : NULL)) {
 			fst_mgr_printf(MSG_ERROR,
-			"Cannot add slave interface %s", ifaces[i].name);
+				"Cannot add slave interface %s", ifaces[i].name);
 			goto error_add;
 		}
 	}

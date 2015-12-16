@@ -155,9 +155,10 @@ Boolean fst_is_supplicant(void);
  * @master: Master interface name
  * @iface: Interface name
  * @acl_file: ACL file name for accept_mac_file (see hostapd.conf), can be NULL
+ * @ctrl_interface: Control interface path, can be NULL
  */
 int fst_add_iface(const char *master, const struct fst_iface_info *iface,
-	const char *acl_file);
+	const char *acl_file, const char *ctrl_interface);
 
 /**
  * fst_del_iface - Delete interface from Hostap
