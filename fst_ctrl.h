@@ -57,24 +57,6 @@ typedef void (*fst_notification_cb_func)(void *cb_ctx,
  */
 int fst_set_notify_cb(fst_notification_cb_func ntfy_cb, void *ntfy_cb_ctx);
 
-/**
- * get_sta_info - get connected sta (or bss) information from the wpa_supplicant/hostapd
- * @bssid: Mac address of the peer in the format: 11:22:33:44:55:66
- * @response: Multi-line, null terminated string with the response, allocated in the function.
- * 				The caller should release the response
- * Returns: Length of the allocated string if success or negative error code.
- */
-int get_sta_info(const char * bssid, char ** response);
-
-/**
- * get_scan_results - get [ optionally FST Capable] scan results
- * @fst_only: indicate whever scan results should be limited to FST-capable entries only
- * @response: Multi-line, null terminated string with the response, allocated in the function.
- * 				The caller should release the response
- * Returns: Length of the allocated string if success or negative error code.
- */
-int get_scan_results(char ** response, Boolean fst_only);
-
 struct fst_group_info {
 	char id[FST_MAX_GROUP_ID_SIZE];
 };
