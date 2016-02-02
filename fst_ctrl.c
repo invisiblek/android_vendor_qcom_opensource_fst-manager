@@ -1055,7 +1055,7 @@ static struct wpa_ctrl *try_to_open_wpa_ctrl(const char *name)
 {
 	WPA_ASSERT(name != NULL);
 
-	if (*name) {
+	if (name && *name) {
 #ifndef ANDROID
 		struct stat stat_buf;
 		if (stat(name, &stat_buf) < 0) {
@@ -1105,6 +1105,11 @@ Boolean fst_ctrl_create(const char *ctrl_iface, unsigned int ping_interval)
 	WPA_ASSERT(ctrl_iface != NULL);
 	WPA_ASSERT(ctrl_evt == NULL);
 	WPA_ASSERT(ctrl_cmd == NULL);
+
+	if (ctrl_iface == NULL) {
+		fst_mgr_printf(MSG_ERROR, "ctrl_iface is invalid");
+		return FALSE;
+	}
 
 	ctrl_evt = try_to_open_wpa_ctrl(ctrl_iface);
 	if (!ctrl_evt) {
@@ -1164,11 +1169,20 @@ void fst_ctrl_free(void)
 {
 	WPA_ASSERT(ctrl_evt != NULL);
 	WPA_ASSERT(ctrl_cmd != NULL);
-	eloop_unregister_read_sock(wpa_ctrl_get_fd(ctrl_evt));
+
+	if (ctrl_evt != NULL)
+		eloop_unregister_read_sock(wpa_ctrl_get_fd(ctrl_evt));
+
 	eloop_cancel_timeout(fst_ping, NULL, NULL);
-	wpa_ctrl_close(ctrl_cmd);
-	ctrl_cmd = NULL;
-	wpa_ctrl_detach(ctrl_evt);
-	wpa_ctrl_close(ctrl_evt);
-	ctrl_evt = NULL;
+
+	if (ctrl_cmd != NULL) {
+		wpa_ctrl_close(ctrl_cmd);
+		ctrl_cmd = NULL;
+	}
+
+	if (ctrl_evt != NULL) {
+		wpa_ctrl_detach(ctrl_evt);
+		wpa_ctrl_close(ctrl_evt);
+		ctrl_evt = NULL;
+	}
 }

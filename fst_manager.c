@@ -521,6 +521,10 @@ static void _fst_mgr_peer_check_compliance(struct fst_mgr_peer *p)
 	struct fst_mgr_peer_iface *pi;
 
 	WPA_ASSERT(p->session != NULL);
+	if (p->session == NULL) {
+		fst_mgr_printf(MSG_ERROR, "peer session is invalid");
+		return;
+	}
 
 	if (fst_force_nc) {
 		p->session->non_compliant = TRUE;
@@ -1078,6 +1082,11 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 
 	p = _fst_mgr_group_peer_by_session(g, s);
 	WPA_ASSERT(p != NULL);
+	if (p == NULL) {
+		fst_mgr_printf(MSG_ERROR, "peer not found for group %s, session %u",
+			       g->info.id, s->id);
+		return;
+	}
 
 	switch (evext->session_state.extra.to_initial.reason) {
 	case REASON_SETUP:
