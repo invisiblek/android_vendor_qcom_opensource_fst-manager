@@ -73,7 +73,7 @@ static int parse_csv(char *string, char **tokens, int tokenslen)
 	char *tokbuf;
 	int count = 0;
 	char *token = strtok_r(string, delim, &tokbuf);
-	while (token != NULL && count <= tokenslen) {
+	while (token != NULL && count < tokenslen) {
 		count++;
 		*tokens++ = token;
 		token = strtok_r(NULL, delim, &tokbuf);
