@@ -1,7 +1,7 @@
 /*
  * FST TC related routines implementation
  *
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -242,7 +242,7 @@ static int tc_ingress_qdisc_modify(struct fst_tc *f, unsigned add,
 	return res;
 }
 
-typedef void (*tc_filter_fill_clb)(struct fst_tc *f,
+typedef int (*tc_filter_fill_clb)(struct fst_tc *f,
 	unsigned add, struct nl_msg *msg, void *ctx);
 
 static int tc_filter_modify(struct fst_tc *f, unsigned add,
@@ -280,8 +280,13 @@ static int tc_filter_modify(struct fst_tc *f, unsigned add,
 
 	nla_put(msg, TCA_KIND, os_strlen(classifier) + 1, classifier);
 
-	if (clb)
-		clb(f, add, msg, clb_ctx);
+	if (clb) {
+		res = clb(f, add, msg, clb_ctx);
+		if (res < 0) {
+			fst_mgr_printf(MSG_ERROR, "clb failed: %d", res);
+			goto tfm_ret;
+		}
+	}
 
 	res = nl_send_auto(f->nl, msg);
 	if(res < 0)  {
@@ -310,7 +315,7 @@ struct tc_l2da_filter_modify_ctx
 	uint16_t        queue_id;
 };
 
-static void tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
+static int tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
 	struct nl_msg *msg, void *ctx)
 {
 	const char qdisc_action[] = "skbedit";
@@ -362,10 +367,26 @@ static void tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
 		struct nlattr *t_opt, *t_act, *t_1, *t_act_opt;
 
 		t_opt = nla_nest_start(msg, TCA_OPTIONS);
+		if (t_opt == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 		t_act = nla_nest_start(msg, TCA_U32_ACT);
+		if (t_act == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 		t_1 = nla_nest_start(msg, 1);
+		if (t_1 == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 		nla_put(msg, TCA_ACT_KIND, sizeof(qdisc_action), qdisc_action);
 		t_act_opt = nla_nest_start(msg, TCA_ACT_OPTIONS);
+		if (t_act_opt == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 		nla_put(msg, TCA_SKBEDIT_PARMS, sizeof(skbsel), &skbsel);
 		nla_put(msg, TCA_SKBEDIT_QUEUE_MAPPING,
 			sizeof(c->queue_id), &c->queue_id);
@@ -375,6 +396,8 @@ static void tc_l2da_filter_modify_clb(struct fst_tc *f, unsigned add,
 		nla_put(msg, TCA_U32_SEL, sizeof(sel), &sel);
 		nla_nest_end(msg, t_opt);
 	}
+
+	return 0;
 }
 
 static int tc_l2da_filter_modify(struct fst_tc *f, unsigned add,
@@ -409,7 +432,7 @@ static int tc_l2da_filter_modify(struct fst_tc *f, unsigned add,
 	return res;
 }
 
-static void tc_filter_add_mirred_action(struct nl_msg *msg,
+static int tc_filter_add_mirred_action(struct nl_msg *msg,
 	const char *ifname, int prio)
 {
 	const char kind[] = "mirred";
@@ -423,14 +446,26 @@ static void tc_filter_add_mirred_action(struct nl_msg *msg,
 	p.ifindex = if_nametoindex(ifname);
 
 	t_prio = nla_nest_start(msg, prio);
+	if (t_prio == NULL) {
+		fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+		return -1;
+	}
 	nla_put(msg, TCA_ACT_KIND, sizeof(kind), kind);
+
 	t_act_opt = nla_nest_start(msg, TCA_ACT_OPTIONS);
+	if (t_act_opt == NULL) {
+		fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+		return -1;
+	}
+
 	nla_put(msg, TCA_MIRRED_PARMS, sizeof(p), &p);
 	nla_nest_end(msg, t_act_opt);
 	nla_nest_end(msg, t_prio);
+
+	return 0;
 }
 
-static void tc_filter_add_generic_action(struct nl_msg *msg, int prio,
+static int tc_filter_add_generic_action(struct nl_msg *msg, int prio,
 	int action)
 {
 	const char kind[] = "gact";
@@ -442,14 +477,25 @@ static void tc_filter_add_generic_action(struct nl_msg *msg, int prio,
 	p.action = action;
 
 	t_prio = nla_nest_start(msg, prio);
+	if (t_prio == NULL) {
+		fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+		return -1;
+	}
 	nla_put(msg, TCA_ACT_KIND, sizeof(kind), kind);
+
 	t_act_opt = nla_nest_start(msg, TCA_ACT_OPTIONS);
+	if (t_act_opt == NULL) {
+		fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+		return -1;
+	}
 	nla_put(msg, TCA_GACT_PARMS, sizeof(p), &p);
 	nla_nest_end(msg, t_act_opt);
 	nla_nest_end(msg, t_prio);
+
+	return 0;
 }
 
-static void tc_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
+static int tc_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 	struct nl_msg *msg, void *ctx)
 {
 	if (add) {
@@ -460,6 +506,7 @@ static void tc_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 			struct tc_u32_sel sel;
 			struct tc_u32_key keys[1];
 		} sel;
+		int res;
 
 		memset(&sel, 0, sizeof(sel));
 
@@ -471,19 +518,34 @@ static void tc_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 		sel.sel.nkeys = 1;
 
 		t_opt = nla_nest_start(msg, TCA_OPTIONS);
+		if (t_opt == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 
 		t_act = nla_nest_start(msg, TCA_U32_ACT);
+		if (t_act == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
+
 		dl_list_for_each(i, &f->ifaces, struct fst_tc_iface,
 			ifaces_lentry) {
-			tc_filter_add_mirred_action(msg, i->ifname, prio);
+			res = tc_filter_add_mirred_action(msg, i->ifname, prio);
+			if (res < 0)
+				return res;
 			++prio;
 		}
-		tc_filter_add_generic_action(msg, prio, TC_ACT_SHOT);
+		res = tc_filter_add_generic_action(msg, prio, TC_ACT_SHOT);
+		if (res < 0)
+			return res;
 		nla_nest_end(msg, t_act);
 
 		nla_put(msg, TCA_U32_SEL, sizeof(sel), &sel);
 		nla_nest_end(msg, t_opt);
 	}
+
+	return 0;
 }
 
 static int tc_mc_filter_modify(struct fst_tc *f, unsigned add)
@@ -602,7 +664,7 @@ struct tc_rx_mc_filter_modify_ctx
 	const uint8_t       *mac;
 };
 
-static void tc_rx_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
+static int tc_rx_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 	struct nl_msg *msg, void *ctx)
 {
 	if (add) {
@@ -613,6 +675,7 @@ static void tc_rx_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 			struct tc_u32_sel sel;
 			struct tc_u32_key keys[2];
 		} sel;
+		int res;
 
 		memset(&sel, 0, sizeof(sel));
 
@@ -636,14 +699,27 @@ static void tc_rx_mc_filter_modify_clb(struct fst_tc *f, unsigned add,
 		struct nlattr *t_opt, *t_act;
 
 		t_opt = nla_nest_start(msg, TCA_OPTIONS);
+		if (t_opt == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 
 		t_act = nla_nest_start(msg, TCA_U32_ACT);
-		tc_filter_add_generic_action(msg, 1, TC_ACT_SHOT);
+		if (t_act == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
+
+		res = tc_filter_add_generic_action(msg, 1, TC_ACT_SHOT);
+		if (res < 0)
+			return res;
 		nla_nest_end(msg, t_act);
 
 		nla_put(msg, TCA_U32_SEL, sizeof(sel), &sel);
 		nla_nest_end(msg, t_opt);
 	}
+
+	return 0;
 }
 
 static int fst_tc_modify_rx_mc_filters(struct fst_tc *f, unsigned add,
@@ -682,7 +758,7 @@ static int fst_tc_modify_rx_mc_filters(struct fst_tc *f, unsigned add,
 	return 0;
 }
 
-static void tc_rx_eapol_filter_modify_clb(struct fst_tc *f, unsigned add,
+static int tc_rx_eapol_filter_modify_clb(struct fst_tc *f, unsigned add,
 	struct nl_msg *msg, void *ctx)
 {
 	if (add) {
@@ -691,6 +767,7 @@ static void tc_rx_eapol_filter_modify_clb(struct fst_tc *f, unsigned add,
 			struct tc_u32_sel sel;
 			struct tc_u32_key keys[1];
 		} sel;
+		int res;
 
 		memset(&sel, 0, sizeof(sel));
 
@@ -702,14 +779,27 @@ static void tc_rx_eapol_filter_modify_clb(struct fst_tc *f, unsigned add,
 		sel.sel.nkeys = 1;
 
 		t_opt = nla_nest_start(msg, TCA_OPTIONS);
+		if (t_opt == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
 
 		t_act = nla_nest_start(msg, TCA_U32_ACT);
-		tc_filter_add_generic_action(msg, 1, TC_ACT_OK);
+		if (t_act == NULL) {
+			fst_mgr_printf(MSG_ERROR, "nla_nest_start failed");
+			return -1;
+		}
+
+		res = tc_filter_add_generic_action(msg, 1, TC_ACT_OK);
+		if (res < 0)
+			return res;
 		nla_nest_end(msg, t_act);
 
 		nla_put(msg, TCA_U32_SEL, sizeof(sel), &sel);
 		nla_nest_end(msg, t_opt);
 	}
+
+	return 0;
 }
 
 static int fst_tc_modify_rx_eapol_filters(struct fst_tc *f, unsigned add)
