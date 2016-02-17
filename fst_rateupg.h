@@ -1,7 +1,7 @@
 /*
  * FST Manager: Rate Upgrade
  *
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -42,5 +42,17 @@ int fst_rate_upgrade_on_connect(const struct fst_group_info *group,
 	const char *iface, const u8* addr);
 int fst_rate_upgrade_on_disconnect(const struct fst_group_info *group,
 	const char *iface, const u8* addr);
+/**
+ * fst_rate_upgrade_on_switch_completed - called after successful session
+ * switch. This function will trigger disconnect from peer on old_iface if it's
+ * not the group's master interface
+ *
+ * @group: FST group of the session
+ * @old_iface: interface that we switch from
+ * @new_iface: interface that we switch to
+ * @peer_addr: peer's MAC address
+ */
+void fst_rate_upgrade_on_switch_completed(const struct fst_group_info *group,
+	const char *old_iface, const char *new_iface, const u8* peer_addr);
 
 #endif /* __FST_RATEUPG_H */
