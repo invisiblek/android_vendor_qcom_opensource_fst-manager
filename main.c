@@ -56,7 +56,7 @@ extern void fst_ctrl_free(void);
 
 /* globals */
 unsigned int fst_debug_level = MSG_INFO;
-unsigned int fst_num_of_retries = 3;
+unsigned int fst_num_of_retries = 20;
 unsigned int fst_ping_interval = 1;
 Boolean      fst_force_nc = FALSE;
 static Boolean fst_main_do_loop = FALSE;
