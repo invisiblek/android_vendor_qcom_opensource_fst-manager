@@ -1,7 +1,7 @@
 /*
  * FST Manager implementation
  *
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -1100,6 +1100,10 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 				FST_INITIATOR_LOCAL) ? "local" : "remote");
 		_fst_mgr_peer_set_active_iface(p, s->new_iface, g->drv);
 		s->state = FST_MGR_SESSION_STATE_IDLE;
+
+		fst_cfgmgr_on_switch_completed(&g->info, s->old_iface->info.name,
+			s->new_iface->info.name, p->addr);
+
 		break;
 	case REASON_TEARDOWN:
 	case REASON_STT:

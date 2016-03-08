@@ -1,7 +1,7 @@
 /*
  * FST Manager: FST Configuration Manager
  *
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -690,6 +690,16 @@ int fst_cfgmgr_on_disconnect(struct fst_group_info *group, const char *iface,
 		break;
 	}
 	return res;
+}
+
+void fst_cfgmgr_on_switch_completed(const struct fst_group_info *group,
+	const char *old_iface, const char *new_iface, const u8* peer_addr)
+{
+	if (fstcfg.method != FST_CONFIG_INI)
+		return;
+
+	fst_rate_upgrade_on_switch_completed(group, old_iface,
+		new_iface, peer_addr);
 }
 
 int fst_cfgmgr_get_mux_type(const char *gname, char *buf, int blen)
