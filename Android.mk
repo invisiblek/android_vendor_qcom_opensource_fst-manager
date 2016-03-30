@@ -34,7 +34,7 @@ L_CFLAGS += -DDEFAULT_HAPD_CLI_DIR=\"/data/misc/wifi/hostapd\"
 L_CFLAGS += -DDEFAULT_WPAS_CLI_DIR=\"\"
 L_CFLAGS += -DCONFIG_ANDROID_LOG
 L_CFLAGS += -DANDROID_LOG_NAME=\"fstman\"
-#Disable unused parameter warnings
+# Disable unused parameter warnings
 L_CFLAGS += -Wno-unused-parameter
 
 include $(CLEAR_VARS)
