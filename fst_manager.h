@@ -57,7 +57,7 @@ extern unsigned int fst_debug_level;
 #define fst_mgr_printf(level, format, ...) \
 	do { \
 		if ((level) >= fst_debug_level) { \
-			struct timeval tv; \
+			struct timeval tv = {0}; \
 			gettimeofday(&tv, NULL); \
 			_fst_mgr_printf("[%08lu.%06lu] FST: " FST_MGR_COMPONENT \
 				": %s: " format "\n", \
