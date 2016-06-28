@@ -256,7 +256,7 @@ int fst_ini_config_get_group_slave_ifaces(struct fst_ini_config *h,
 			/* Skip the master interface */
 			cnt--;
 			if (i < cnt)
-				memmove(&(*ifaces)[i], &(*ifaces)[i+1],
+				os_memmove(&(*ifaces)[i], &(*ifaces)[i+1],
 					(cnt-i) * sizeof(struct fst_iface_info));
 			return cnt;
 		}
