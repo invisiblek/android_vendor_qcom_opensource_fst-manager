@@ -262,7 +262,7 @@ static int do_bonding_operations(Boolean enslave)
 			if (enslave)
 				res = enslave_device(sock, buf, ifaces[j].name);
 			else
-				res = release_device(sock, buf, ifaces[i].name);
+				res = release_device(sock, buf, ifaces[j].name);
 			if (res < 0) {
 				fst_mgr_printf(MSG_ERROR, "Cannot process %s",
 					ifaces[j].name);
