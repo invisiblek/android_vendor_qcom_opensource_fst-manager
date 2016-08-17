@@ -116,6 +116,10 @@ static int _send_genl_reset_map_msg(struct fst_mux *ctx)
 		return -1;
 
 	res = _send_and_free_genl_msg(ctx, msg);
+	if (!res)
+		fst_mgr_printf(MSG_INFO, "L2DA map reset");
+	else
+		fst_mgr_printf(MSG_ERROR, "Cannot reset L2DA map");
 	return res;
 }
 
@@ -136,7 +140,12 @@ static int _send_genl_set_opts_msg(struct fst_mux *ctx, u32 opts)
 		return -1;
 	}
 
-	return _send_and_free_genl_msg(ctx, msg);
+	res = _send_and_free_genl_msg(ctx, msg);
+	if (!res)
+		fst_mgr_printf(MSG_INFO, "L2DA opts set to 0x%08x", opts);
+	else
+		fst_mgr_printf(MSG_ERROR, "Cannot set L2DA opts");
+	return res;
 }
 
 static int _send_genl_set_def_slave_msg(struct fst_mux *ctx, const char *ifname)
@@ -156,7 +165,14 @@ static int _send_genl_set_def_slave_msg(struct fst_mux *ctx, const char *ifname)
 		return -1;
 	}
 
-	return _send_and_free_genl_msg(ctx, msg);
+	res = _send_and_free_genl_msg(ctx, msg);
+	if (!res)
+		fst_mgr_printf(MSG_INFO, "L2DA default slave set to %s",
+			       ifname);
+	else
+		fst_mgr_printf(MSG_ERROR, "Cannot set L2DA default slave");
+	return res;
+
 }
 
 static int _send_genl_set_change_map_msg(struct fst_mux *ctx, const u8 *da,
@@ -187,7 +203,16 @@ static int _send_genl_set_change_map_msg(struct fst_mux *ctx, const u8 *da,
 		}
 	}
 
-	return _send_and_free_genl_msg(ctx, msg);
+	res = _send_and_free_genl_msg(ctx, msg);
+	if (!res)
+		fst_mgr_printf(MSG_INFO, "L2DA map entry changed ["MACSTR",%s]",
+				MAC2STR(da), ifname ? ifname : "NULL");
+	else
+		fst_mgr_printf(MSG_ERROR,
+			       "Cannot change L2DA map entry  ["MACSTR", %s]",
+				MAC2STR(da), ifname ? ifname : "NULL");
+	return res;
+
 
 fail_nlmsg_put:
 	nlmsg_free(msg);
