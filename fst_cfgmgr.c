@@ -745,6 +745,25 @@ int fst_cfgmgr_get_mux_ifname(const char *gname, char *buf, int blen)
 	return res;
 }
 
+int fst_cfgmgr_get_l2da_ap_default_ifname(const char *gname, char *buf,
+	int blen)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_l2da_ap_default_ifname(fstcfg.handle, gname,
+			buf, blen);
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
+	}
+	return res;
+}
+
 Boolean fst_cfgmgr_is_mux_managed(const char *gname)
 {
 	Boolean res = FALSE;

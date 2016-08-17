@@ -48,6 +48,7 @@
 struct fst_mux
 {
 	char           bond_ifname[IFNAMSIZ + 1];
+	char          *ap_default_ifname;
 	struct nl_sock *nl;
 	int            fam_id;
 };
@@ -198,6 +199,7 @@ struct fst_mux *fst_mux_init(const char *group_name)
 	struct fst_mux *ctx = NULL;
 	int len;
 	char buf[80];
+	char ifname[IFNAMSIZ + 1];
 
 	len = fst_cfgmgr_get_mux_type(group_name, buf, sizeof(buf)-1);
 	if (len) {
@@ -219,6 +221,16 @@ struct fst_mux *fst_mux_init(const char *group_name)
 	if (len == 0) {
 		fst_mgr_printf(MSG_ERROR, "Cannot get mux ifname");
 		goto fail_mux_name;
+	}
+
+	if (!fst_is_supplicant() &&
+	    fst_cfgmgr_get_l2da_ap_default_ifname(group_name, ifname,
+					     sizeof(ifname)-1) > 0) {
+		ctx->ap_default_ifname = os_strdup(ifname);
+		if (!ctx->ap_default_ifname) {
+			fst_mgr_printf(MSG_ERROR, "Cannot dup ap default ifname");
+			goto fail_ap_default_name;
+		}
 	}
 
 	ctx->nl = nl_socket_alloc();
@@ -249,6 +261,8 @@ fail_nl_famid:
 fail_nl_connect:
 	nl_socket_free(ctx->nl);
 fail_nl_socket:
+	os_free(ctx->ap_default_ifname);
+fail_ap_default_name:
 fail_mux_name:
 	os_free(ctx);
 	return NULL;
@@ -266,6 +280,12 @@ int fst_mux_start(struct fst_mux *ctx)
 	opts = fst_is_supplicant() ? BOND_L2DA_STA_OPTS : BOND_L2DA_AP_OPTS;
 	if (_send_genl_set_opts_msg(ctx, opts)) {
 		fst_mgr_printf(MSG_ERROR, "Error starting mux: set opts");
+		return -1;
+	}
+
+	if (!fst_is_supplicant() && ctx->ap_default_ifname &&
+	    _send_genl_set_def_slave_msg(ctx, ctx->ap_default_ifname)) {
+		fst_mgr_printf(MSG_ERROR, "Error starting mux: set ap default iface");
 		return -1;
 	}
 
@@ -307,5 +327,6 @@ void fst_mux_stop(struct fst_mux *ctx)
 void fst_mux_cleanup(struct fst_mux *ctx)
 {
 	nl_socket_free(ctx->nl);
+	os_free(ctx->ap_default_ifname);
 	os_free(ctx);
 }

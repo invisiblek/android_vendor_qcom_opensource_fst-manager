@@ -74,6 +74,8 @@ void fst_cfgmgr_on_switch_completed(const struct fst_group_info *group,
 	const char *old_iface, const char *new_iface, const u8* peer_addr);
 int fst_cfgmgr_get_mux_type(const char *gname, char *buf, int blen);
 int fst_cfgmgr_get_mux_ifname(const char *gname, char *buf, int blen);
+int fst_cfgmgr_get_l2da_ap_default_ifname(const char *gname, char *buf,
+	int blen);
 Boolean fst_cfgmgr_is_mux_managed(const char *gname);
 
 #endif /* __FST_FSTCONF_H */

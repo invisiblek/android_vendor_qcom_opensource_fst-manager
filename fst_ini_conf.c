@@ -281,6 +281,14 @@ int fst_ini_config_get_mux_ifname(struct fst_ini_config *h,
 	return strlen(buf);
 }
 
+int fst_ini_config_get_l2da_ap_default_ifname(struct fst_ini_config *h,
+	const char *gname, char *buf, int buflen)
+{
+	if(!fst_ini_config_read(h, gname, "l2da_ap_default_ifname", buf, buflen))
+		return 0;
+	return strlen(buf);
+}
+
 Boolean fst_ini_config_is_mux_managed(struct fst_ini_config *h, const char *gname)
 {
 	char buf[INI_MAX_STRING+1];

@@ -58,6 +58,8 @@ int fst_ini_config_get_mux_type(struct fst_ini_config *h,
 	const char *gname, char *buf, int buflen);
 int fst_ini_config_get_mux_ifname(struct fst_ini_config *h,
 	const char *gname, char *buf, int buflen);
+int fst_ini_config_get_l2da_ap_default_ifname(struct fst_ini_config *h,
+	const char *gname, char *buf, int buflen);
 Boolean fst_ini_config_is_mux_managed(struct fst_ini_config *h,
 	const char *gname);
 int fst_ini_config_get_iface_group_cipher(struct fst_ini_config *h,
