@@ -52,6 +52,9 @@ struct fst_mux
 	int            fam_id;
 };
 
+#define BOND_L2DA_STA_OPTS  BOND_L2DA_OPT_DEDUP_RX
+#define BOND_L2DA_AP_OPTS  (BOND_L2DA_OPT_DUP_MC_TX | \
+			    BOND_L2DA_OPT_FORWARD_RX)
 
 static struct nl_msg * _init_genl_msg(struct fst_mux *ctx, int cmd)
 {
@@ -260,9 +263,7 @@ int fst_mux_start(struct fst_mux *ctx)
 		return -1;
 	}
 
-	opts = fst_is_supplicant() ?
-		BOND_L2DA_OPT_DEDUP_RX : /* STA only de-dups RX */
-		BOND_L2DA_OPT_DUP_MC_TX; /* AP only dups MC TX */
+	opts = fst_is_supplicant() ? BOND_L2DA_STA_OPTS : BOND_L2DA_AP_OPTS;
 	if (_send_genl_set_opts_msg(ctx, opts)) {
 		fst_mgr_printf(MSG_ERROR, "Error starting mux: set opts");
 		return -1;
