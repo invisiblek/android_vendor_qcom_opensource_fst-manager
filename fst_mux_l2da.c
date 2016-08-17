@@ -135,6 +135,61 @@ static int _send_genl_set_opts_msg(struct fst_mux *ctx, u32 opts)
 	return _send_and_free_genl_msg(ctx, msg);
 }
 
+static int _send_genl_set_def_slave_msg(struct fst_mux *ctx, const char *ifname)
+{
+	struct nl_msg *msg;
+	int res;
+
+	msg = _init_genl_msg(ctx, BOND_GENL_CMD_L2DA_SET_DEFAULT);
+	if (msg == NULL)
+		return -1;
+
+	res = nla_put_string(msg, BOND_GENL_ATTR_SLAVE_NAME, ifname);
+	if (res != 0) {
+		fst_mgr_printf(MSG_ERROR, "Cannot put slave: %s",
+			nl_geterror(res));
+		nlmsg_free(msg);
+		return -1;
+	}
+
+	return _send_and_free_genl_msg(ctx, msg);
+}
+
+static int _send_genl_set_change_map_msg(struct fst_mux *ctx, const u8 *da,
+		const char *ifname)
+{
+	struct nl_msg *msg;
+	int res;
+
+	res = ifname ? BOND_GENL_CMD_L2DA_ADD_MAP_ENTRY :
+		       BOND_GENL_CMD_L2DA_DEL_MAP_ENTRY;
+
+	msg = _init_genl_msg(ctx, res);
+	if (msg == NULL)
+		return -1;
+
+	res = nla_put(msg, BOND_GENL_ATTR_MAC, ETH_ALEN, da);
+	if (res != 0) {
+		fst_mgr_printf(MSG_ERROR, "Cannot put address: %s", nl_geterror(res));
+		goto fail_nlmsg_put;
+	}
+
+	if (ifname) {
+		res = nla_put_string(msg, BOND_GENL_ATTR_SLAVE_NAME, ifname);
+		if (res != 0) {
+			fst_mgr_printf(MSG_ERROR, "Cannot put slave: %s",
+				nl_geterror(res));
+			goto fail_nlmsg_put;
+		}
+	}
+
+	return _send_and_free_genl_msg(ctx, msg);
+
+fail_nlmsg_put:
+	nlmsg_free(msg);
+	return -1;
+}
+
 struct fst_mux *fst_mux_init(const char *group_name)
 {
 	struct fst_mux *ctx = NULL;
@@ -219,67 +274,16 @@ int fst_mux_start(struct fst_mux *ctx)
 int fst_mux_add_map_entry(struct fst_mux *ctx, const u8 *da,
 		const char *iface_name)
 {
-	struct nl_msg *msg;
-	int res;
-
-	res = fst_is_supplicant() ?
-		BOND_GENL_CMD_L2DA_SET_DEFAULT :
-		BOND_GENL_CMD_L2DA_ADD_MAP_ENTRY;
-
-	msg = _init_genl_msg(ctx, res);
-	if (msg == NULL)
-		return -1;
-
-	res = nla_put_string(msg, BOND_GENL_ATTR_SLAVE_NAME, iface_name);
-	if (res != 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot put slave: %s",
-			nl_geterror(res));
-		goto fail_nlmsg_put;
-	}
-
-	if (!fst_is_supplicant()) {
-		res = nla_put(msg, BOND_GENL_ATTR_MAC, ETH_ALEN, da);
-		if (res != 0) {
-			fst_mgr_printf(MSG_ERROR, "Cannot put address: %s",
-				nl_geterror(res));
-			goto fail_nlmsg_put;
-		}
-	}
-
-	res = _send_and_free_genl_msg(ctx, msg);
-	return res;
-
-fail_nlmsg_put:
-	nlmsg_free(msg);
-	return -1;
+	return fst_is_supplicant() ?
+			_send_genl_set_def_slave_msg(ctx, iface_name) :
+			_send_genl_set_change_map_msg(ctx, da, iface_name);
 }
 
 int fst_mux_del_map_entry(struct fst_mux *ctx, const u8 *da)
 {
-	struct nl_msg *msg;
-	int res;
-
-	if (fst_is_supplicant()) {
-		fst_mgr_printf(MSG_INFO, "No need to del map entry for STA");
-		return 0;
-	}
-
-	msg = _init_genl_msg(ctx, BOND_GENL_CMD_L2DA_DEL_MAP_ENTRY);
-	if (msg == NULL)
-		return -1;
-
-	res = nla_put(msg, BOND_GENL_ATTR_MAC, ETH_ALEN, da);
-	if (res != 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot put address: %s", nl_geterror(res));
-		goto fail_nlmsg_put;
-	}
-
-	res = _send_and_free_genl_msg(ctx, msg);
-	return res;
-
-fail_nlmsg_put:
-	nlmsg_free(msg);
-	return -1;
+	/* "No need to del map entry for STA as we use default slave */
+	return fst_is_supplicant() ?
+			0 : _send_genl_set_change_map_msg(ctx, da, NULL);
 }
 
 int fst_mux_register_iface(struct fst_mux *ctx, const char *iface_name,
