@@ -115,6 +115,26 @@ static int _send_genl_reset_map_msg(struct fst_mux *ctx)
 	return res;
 }
 
+static int _send_genl_set_opts_msg(struct fst_mux *ctx, u32 opts)
+{
+	struct nl_msg *msg;
+	int res;
+
+	msg = _init_genl_msg(ctx, BOND_GENL_CMD_L2DA_SET_OPTS);
+	if (msg == NULL)
+		return -1;
+
+	res = nla_put_u32(msg, BOND_GENL_ATTR_L2DA_OPTS, opts);
+	if (res != 0) {
+		fst_mgr_printf(MSG_ERROR, "Cannot put opts: %s",
+			nl_geterror(res));
+		nlmsg_free(msg);
+		return -1;
+	}
+
+	return _send_and_free_genl_msg(ctx, msg);
+}
+
 struct fst_mux *fst_mux_init(const char *group_name)
 {
 	struct fst_mux *ctx = NULL;
@@ -178,10 +198,21 @@ fail_mux_name:
 
 int fst_mux_start(struct fst_mux *ctx)
 {
+	u32 opts;
+
 	if(_send_genl_reset_map_msg(ctx) != 0) {
-		fst_mgr_printf(MSG_ERROR, "Error starting mux");
+		fst_mgr_printf(MSG_ERROR, "Error starting mux: reset map");
 		return -1;
 	}
+
+	opts = fst_is_supplicant() ?
+		BOND_L2DA_OPT_DEDUP_RX : /* STA only de-dups RX */
+		BOND_L2DA_OPT_DUP_MC_TX; /* AP only dups MC TX */
+	if (_send_genl_set_opts_msg(ctx, opts)) {
+		fst_mgr_printf(MSG_ERROR, "Error starting mux: set opts");
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -191,7 +222,11 @@ int fst_mux_add_map_entry(struct fst_mux *ctx, const u8 *da,
 	struct nl_msg *msg;
 	int res;
 
-	msg = _init_genl_msg(ctx, BOND_GENL_CMD_L2DA_ADD_MAP_ENTRY);
+	res = fst_is_supplicant() ?
+		BOND_GENL_CMD_L2DA_SET_DEFAULT :
+		BOND_GENL_CMD_L2DA_ADD_MAP_ENTRY;
+
+	msg = _init_genl_msg(ctx, res);
 	if (msg == NULL)
 		return -1;
 
@@ -202,11 +237,13 @@ int fst_mux_add_map_entry(struct fst_mux *ctx, const u8 *da,
 		goto fail_nlmsg_put;
 	}
 
-	res = nla_put(msg, BOND_GENL_ATTR_MAC, ETH_ALEN, da);
-	if (res != 0) {
-		fst_mgr_printf(MSG_ERROR, "Cannot put address: %s",
-			nl_geterror(res));
-		goto fail_nlmsg_put;
+	if (!fst_is_supplicant()) {
+		res = nla_put(msg, BOND_GENL_ATTR_MAC, ETH_ALEN, da);
+		if (res != 0) {
+			fst_mgr_printf(MSG_ERROR, "Cannot put address: %s",
+				nl_geterror(res));
+			goto fail_nlmsg_put;
+		}
 	}
 
 	res = _send_and_free_genl_msg(ctx, msg);
@@ -221,6 +258,11 @@ int fst_mux_del_map_entry(struct fst_mux *ctx, const u8 *da)
 {
 	struct nl_msg *msg;
 	int res;
+
+	if (fst_is_supplicant()) {
+		fst_mgr_printf(MSG_INFO, "No need to del map entry for STA");
+		return 0;
+	}
 
 	msg = _init_genl_msg(ctx, BOND_GENL_CMD_L2DA_DEL_MAP_ENTRY);
 	if (msg == NULL)
