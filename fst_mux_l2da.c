@@ -53,7 +53,9 @@ struct fst_mux
 	int            fam_id;
 };
 
-#define BOND_L2DA_STA_OPTS  BOND_L2DA_OPT_DEDUP_RX
+#define BOND_L2DA_STA_OPTS  (BOND_L2DA_OPT_DEDUP_RX | \
+			     BOND_L2DA_OPT_REPLACE_MAC | \
+			     BOND_L2DA_OPT_AUTO_ANNOUNCE )
 #define BOND_L2DA_AP_OPTS  (BOND_L2DA_OPT_DUP_MC_TX | \
 			    BOND_L2DA_OPT_FORWARD_RX)
 

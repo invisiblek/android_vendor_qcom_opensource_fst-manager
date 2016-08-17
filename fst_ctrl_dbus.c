@@ -798,7 +798,7 @@ out:
 }
 
 int fst_get_peer_mbies(const struct fst_group_info *group,
-	struct fst_iface_info *iface, uint8_t *peer, char **mbies)
+	struct fst_iface_info *iface, const uint8_t *peer, char **mbies)
 {
 	int           res = -EINVAL;
 	GVariant     *value;

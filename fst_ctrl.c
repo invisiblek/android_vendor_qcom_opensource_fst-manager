@@ -491,7 +491,8 @@ static int parse_peer_mbies(char *buf, void *data)
 	return os_strlen(buf);
 }
 
-int fst_get_peer_mbies(struct fst_iface_info *iface, uint8_t *peer, char **mbies)
+int fst_get_peer_mbies(struct fst_iface_info *iface, const uint8_t *peer,
+		       char **mbies)
 {
 	return do_command(parse_peer_mbies, mbies, FST_CMD_GET_PEER_MBIES " %s "
 			  MACSTR, iface->name, MAC2STR(peer));
@@ -1018,12 +1019,13 @@ int fst_disconnect_peer(const char *ifname, const u8 *peer_addr)
 {
 	int ret;
 
-	fst_mgr_printf(MSG_INFO, "ifname=%s, peer=" MACSTR, ifname, MAC2STR(peer_addr));
-
 	if (fst_is_supplicant()) {
+		fst_mgr_printf(MSG_INFO, "ifname=%s", ifname);
 		ret = do_simple_command("IFNAME=%s DISCONNECT", ifname);
 	}
-	else {
+	else if (peer_addr) {
+		fst_mgr_printf(MSG_INFO, "ifname=%s, peer=" MACSTR, ifname,
+			       MAC2STR(peer_addr));
 		ret = do_simple_command("IFNAME=%s DISASSOCIATE " MACSTR, ifname, MAC2STR(peer_addr));
 	}
 

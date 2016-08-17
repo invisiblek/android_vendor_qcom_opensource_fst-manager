@@ -230,7 +230,8 @@ static int do_bonding_operations(Boolean enslave)
 	for (i = 0; i < gcnt; i++) {
 		muxtype = fst_cfgmgr_get_mux_type(groups[i].id,
 			buf, sizeof(buf)-1);
-		if (muxtype && os_strcmp(buf, "bonding")) {
+		if (muxtype && os_strncmp(buf, "bonding", sizeof(buf)-1) &&
+				os_strncmp(buf, "bonding_l2da", sizeof(buf)-1)) {
 			fst_mgr_printf(MSG_DEBUG,
 				"Group %s mux type %s not supported, skipping",
 				groups[i].id, buf);
