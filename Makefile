@@ -7,6 +7,7 @@ EXTERNAL_CFLAGS :=
 external_srcs :=
 
 #CONFIG_DBUS:=1
+CONFIG_MUX_L2DA:=0
 
 PKG_CONFIG := pkg-config
 
@@ -14,9 +15,14 @@ EXTERNAL_SRC_DIR := external
 
 progs := fstman
 
-local_srcs := fst_mux_bonding.c \
-	fst_manager.c \
-	fst_tc.c
+ifndef CONFIG_MUX_L2DA
+FST_MUX_SRCS=fst_mux_bonding.c fst_tc.c
+else
+FST_MUX_SRCS=fst_mux_l2da.c
+endif
+
+local_srcs := $(FST_MUX_SRCS) \
+	fst_manager.c
 
 LOCAL_CFLAGS += -I$(EXTERNAL_SRC_DIR)/ -I$(EXTERNAL_SRC_DIR)/inih
 EXTERNAL_CFLAGS += $(addprefix -I,$(sort $(dir $(wildcard $(EXTERNAL_SRC_DIR)/*/))))
