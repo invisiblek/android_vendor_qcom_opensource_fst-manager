@@ -50,9 +50,9 @@ int fst_rate_upgrade_on_disconnect(const struct fst_group_info *group,
  * @group: FST group of the session
  * @old_iface: interface that we switch from
  * @new_iface: interface that we switch to
- * @peer_addr: peer's MAC address
+ * @old_peer_addr: peer's MAC address on old_iface
  */
 void fst_rate_upgrade_on_switch_completed(const struct fst_group_info *group,
-	const char *old_iface, const char *new_iface, const u8* peer_addr);
+	const char *old_iface, const char *new_iface, const u8* old_peer_addr);
 
 #endif /* __FST_RATEUPG_H */

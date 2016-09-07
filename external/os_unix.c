@@ -53,7 +53,7 @@ void os_sleep(os_time_t sec, os_time_t usec)
 int os_get_time(struct os_time *t)
 {
 	int res;
-	struct timeval tv;
+	struct timeval tv = {0};
 	res = gettimeofday(&tv, NULL);
 	t->sec = tv.tv_sec;
 	t->usec = tv.tv_usec;

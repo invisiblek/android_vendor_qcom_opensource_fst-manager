@@ -256,7 +256,7 @@ int fst_ini_config_get_group_slave_ifaces(struct fst_ini_config *h,
 			/* Skip the master interface */
 			cnt--;
 			if (i < cnt)
-				memmove(&(*ifaces)[i], &(*ifaces)[i+1],
+				os_memmove(&(*ifaces)[i], &(*ifaces)[i+1],
 					(cnt-i) * sizeof(struct fst_iface_info));
 			return cnt;
 		}
@@ -277,6 +277,14 @@ int fst_ini_config_get_mux_ifname(struct fst_ini_config *h,
 	const char *gname, char *buf, int buflen)
 {
 	if(!fst_ini_config_read(h, gname, "mux_ifname", buf, buflen))
+		return 0;
+	return strlen(buf);
+}
+
+int fst_ini_config_get_l2da_ap_default_ifname(struct fst_ini_config *h,
+	const char *gname, char *buf, int buflen)
+{
+	if(!fst_ini_config_read(h, gname, "l2da_ap_default_ifname", buf, buflen))
 		return 0;
 	return strlen(buf);
 }

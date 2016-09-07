@@ -113,6 +113,25 @@ static inline int os_reltime_initialized(struct os_reltime *t)
 	return t->sec != 0 || t->usec != 0;
 }
 
+static inline size_t memscpy(void* dst, size_t dst_size,
+			     const void* src, size_t src_size)
+{
+	size_t copy_size = (dst_size <= src_size)? dst_size : src_size;
+
+	memcpy(dst, src, copy_size);
+
+	return copy_size;
+}
+
+static inline size_t memsmove(void *dst, size_t dst_size,
+			      const void  *src, size_t src_size)
+{
+	size_t copy_size = (dst_size <= src_size)? dst_size : src_size;
+
+	memmove(dst, src, copy_size);
+
+	return copy_size;
+}
 
 /**
  * os_mktime - Convert broken-down time into seconds since 1970-01-01
@@ -493,10 +512,10 @@ char * os_strdup(const char *s);
 #endif /* WPA_TRACE */
 
 #ifndef os_memcpy
-#define os_memcpy(d, s, n) memcpy((d), (s), (n))
+#define os_memcpy(d, s, n) memscpy((d), (n), (s), (n))
 #endif
 #ifndef os_memmove
-#define os_memmove(d, s, n) memmove((d), (s), (n))
+#define os_memmove(d, s, n) memsmove((d), (n), (s), (n))
 #endif
 #ifndef os_memset
 #define os_memset(s, c, n) memset(s, c, n)

@@ -34,6 +34,7 @@
 #include "utils/common.h"
 #include "utils/list.h"
 #include "common/defs.h"
+#include "common/ieee802_11_defs.h"
 #include "fst_ctrl.h"
 #include "fst_mux.h"
 #include "fst/fst_ctrl_defs.h"
@@ -82,7 +83,6 @@ struct fst_mgr_session
 	struct fst_mgr_group      *group;
 	struct fst_mgr_iface      *old_iface;
 	struct fst_mgr_iface      *new_iface;
-	u8                         addr[ETH_ALEN];
 	u32                        llt;
 	Boolean                    non_compliant;
 	struct dl_list             grp_lentry;
@@ -90,13 +90,13 @@ struct fst_mgr_session
 
 struct fst_mgr_peer_iface
 {
-    struct fst_mgr_iface *iface;
-    struct dl_list        peer_lentry;
+	struct fst_mgr_iface   *iface;
+	u8			addr[ETH_ALEN];
+	struct dl_list      	peer_lentry;
 };
 
 struct fst_mgr_peer
 {
-	u8                      addr[ETH_ALEN];
 	struct fst_mgr_session *session;
 	struct fst_mgr_iface   *active_iface;
 	struct dl_list          ifaces;
@@ -129,6 +129,9 @@ static int _fst_mgr_peer_set_active_iface(struct fst_mgr_peer *p,
 					  struct fst_mux *drv);
 
 static void _fst_mgr_peer_check_compliance(struct fst_mgr_peer *p);
+
+static const u8 *_fst_mgr_peer_get_addr_of_iface(struct fst_mgr_peer *p,
+					   struct fst_mgr_iface *iface);
 
 /* helpers */
 static const char *state_name(enum fst_mgr_session_state state)
@@ -215,28 +218,46 @@ static int _fst_mgr_session_set_new_iface(struct fst_mgr_session *s,
 	return 0;
 }
 
-static int _fst_mgr_session_set_peer_addr(struct fst_mgr_session *s,
-		const u8 *addr)
+static int _fst_mgr_session_set_peer_addr(struct fst_mgr_peer *p)
 {
-	if (!s->non_compliant) {
-		char pval[] = "XX:XX:XX:XX:XX:XX";
+	struct fst_mgr_session *s = p->session;
 
-		snprintf(pval, sizeof(pval), MACSTR, MAC2STR(addr));
-
-		if (fst_session_set(s->id, FST_CSS_PNAME_OLD_PEER_ADDR, pval)) {
-			fst_mgr_printf(MSG_ERROR, "session %u: cannot set old addr to %s",
-					s->id, pval);
-			return -1;
-		}
-
-		if (fst_session_set(s->id, FST_CSS_PNAME_NEW_PEER_ADDR, pval)) {
-			fst_mgr_printf(MSG_ERROR, "session %u: cannot set new addr to %s",
-					s->id, pval);
-			return -1;
-		}
+	if (s == NULL) {
+		fst_mgr_printf(MSG_ERROR, "Session does not exist");
+		return -1;
 	}
 
-	os_memcpy(s->addr, addr, ETH_ALEN);
+	if (s->non_compliant)
+		return 0;
+
+	char pval[] = "XX:XX:XX:XX:XX:XX";
+	const u8 *old_addr, *new_addr;
+
+	old_addr = _fst_mgr_peer_get_addr_of_iface(p, s->old_iface);
+	new_addr = _fst_mgr_peer_get_addr_of_iface(p, s->new_iface);
+	if (!old_addr || !new_addr) {
+		fst_mgr_printf(MSG_ERROR, "session %u: cannot set addr for %s and %s",
+				s->id, s->old_iface->info.name,
+				s->new_iface->info.name);
+		return -1;
+	}
+
+	snprintf(pval, sizeof(pval), MACSTR, MAC2STR(old_addr));
+
+	if (fst_session_set(s->id, FST_CSS_PNAME_OLD_PEER_ADDR, pval)) {
+		fst_mgr_printf(MSG_ERROR, "session %u: cannot set old addr to %s",
+				s->id, pval);
+		return -1;
+	}
+
+	snprintf(pval, sizeof(pval), MACSTR, MAC2STR(new_addr));
+
+	if (fst_session_set(s->id, FST_CSS_PNAME_NEW_PEER_ADDR, pval)) {
+		fst_mgr_printf(MSG_ERROR, "session %u: cannot set new addr to %s",
+				s->id, pval);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -282,9 +303,9 @@ static void _fst_mgr_session_nc_transfer(struct fst_mgr_session *s,
 	WPA_ASSERT(s->non_compliant);
 
 	fst_mgr_printf(MSG_INFO, "session %u: performing non-compliant transfer"
-                        " for " MACSTR ": old_iface=%s new_iface=%s",
-                        s->id, MAC2STR(s->addr), s->old_iface->info.name,
-                        s->new_iface->info.name);
+		" for: old_iface=%s new_iface=%s",
+		s->id, s->old_iface->info.name,
+		s->new_iface->info.name);
 	_fst_mgr_peer_set_active_iface(p, s->new_iface, s->group->drv);
 	s->state = FST_MGR_SESSION_STATE_IDLE;
 }
@@ -391,41 +412,77 @@ error_add:
 /*
  * FST Manager Peer
  */
+
+static void _fst_mgr_peer_print_connected_addr(struct fst_mgr_peer *p)
+{
+	if (dl_list_empty(&p->ifaces)) {
+		fst_mgr_printf(MSG_DEBUG, "peer %p has no connections", p);
+		return;
+	}
+
+	struct fst_mgr_peer_iface *pi;
+	_fst_peer_foreach_iface(p, pi) {
+		fst_mgr_printf(MSG_DEBUG, "peer %p has addr " MACSTR " / %s",
+			p, MAC2STR(pi->addr), pi->iface->info.name);
+	}
+}
+
+static const u8 *_fst_mgr_peer_get_addr_of_iface(struct fst_mgr_peer *p,
+					   struct fst_mgr_iface *iface)
+{
+	struct fst_mgr_peer_iface *pi;
+
+	_fst_peer_foreach_iface(p, pi) {
+		if (pi->iface == iface)
+			return pi->addr;
+	}
+
+	return NULL;
+}
+
 static int _fst_mgr_peer_set_active_iface(struct fst_mgr_peer *p,
 		struct fst_mgr_iface *i,
 		struct fst_mux *drv)
 {
 	int res = 0;
 
-	if (p->active_iface == i) {
-		fst_mgr_printf(MSG_INFO,
-				"%s is already active for " MACSTR,
-				i->info.name, MAC2STR(p->addr));
+	if (i && p->active_iface == i) {
+		fst_mgr_printf(MSG_INFO, "%s is already active for peer %p",
+			i->info.name, p);
 		return 0;
 	}
 
 	if (p->active_iface) {
-		fst_mux_del_map_entry(drv, p->addr);
+		const u8 *addr = _fst_mgr_peer_get_addr_of_iface(p, p->active_iface);
+		fst_mux_del_map_entry(drv, addr);
 		fst_mgr_printf(MSG_INFO,
 				"Map entry removed: " MACSTR " via %s",
-				MAC2STR(p->addr), p->active_iface->info.name);
+				MAC2STR(addr),
+				p->active_iface->info.name);
 		p->active_iface = NULL;
 	}
 
-	if (i) {
-		res = fst_mux_add_map_entry(drv, p->addr, i->info.name);
-		if (!res) {
-			/* Set iface as an active */
-			p->active_iface = i;
-			fst_mgr_printf(MSG_INFO,
-					"Map entry added: " MACSTR " via %s",
-					MAC2STR(p->addr), i->info.name);
-		} else
-			fst_mgr_printf(MSG_ERROR,
-					"Cannot add map entry: " MACSTR " via %s",
-					MAC2STR(p->addr), i->info.name);
+	if (!i)
+		return 0;
+
+	const u8 *addr = _fst_mgr_peer_get_addr_of_iface(p, i);
+	if (!addr) {
+		fst_mgr_printf(MSG_ERROR, "Peer is not connected via %s",
+			i->info.name);
+		return -1;
 	}
 
+	res = fst_mux_add_map_entry(drv, addr, i->info.name);
+	if (!res) {
+		/* Set iface as an active */
+		p->active_iface = i;
+		fst_mgr_printf(MSG_INFO,
+			"Map entry added: " MACSTR " via %s",
+			MAC2STR(addr), i->info.name);
+	} else
+		fst_mgr_printf(MSG_ERROR,
+			"Cannot add map entry: " MACSTR " via %s",
+			MAC2STR(addr), i->info.name);
 	return res;
 }
 
@@ -458,33 +515,30 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 
 	if (p->session && _fst_mgr_session_is_in_progress(p->session)) {
 		fst_mgr_printf(MSG_WARNING,
-				"peer " MACSTR ": Cannot initiate next setup: "
-				"another session is in progress",
-				MAC2STR(p->addr));
+			"peer %p: Cannot initiate next setup: "
+			"another session is in progress", p);
 		return;
 	}
 
 	if (!p->active_iface) {
 		fst_mgr_printf(MSG_WARNING,
-						"peer " MACSTR ": Cannot initiate next setup: "
-						"no active iface",
-						MAC2STR(p->addr));
+			"peer %p: Cannot initiate next setup: "
+			"no active iface", p);
 		return;
 	}
 
 	if (!p->session &&
 		_fst_mgr_session_init(g, &p->session, FST_INVALID_SESSION_ID)) {
-		fst_mgr_printf(MSG_ERROR, "group %s: cannot initialize session " MACSTR,
-				g->info.id, MAC2STR(p->addr));
+		fst_mgr_printf(MSG_ERROR, "group %s: cannot initialize session with peer %p",
+				g->info.id, p);
 		return;
 	}
 
 	new_i = _fst_mgr_peer_get_next_iface(p);
 	if (new_i == NULL) {
 		fst_mgr_printf(MSG_WARNING,
-						"peer " MACSTR ": Cannot initiate next setup: "
-						"no backup iface connected",
-						MAC2STR(p->addr));
+			"peer %p: Cannot initiate next setup: "
+			"no backup iface connected", p);
 		return;
 	}
 
@@ -497,20 +551,19 @@ static void _fst_mgr_peer_try_to_initiate_next_setup(struct fst_mgr_peer *p,
 
 	if (_fst_mgr_session_set_old_iface(p->session, p->active_iface) ||
 		_fst_mgr_session_set_new_iface(p->session, new_i) ||
-		_fst_mgr_session_set_peer_addr(p->session, p->addr) ||
+		_fst_mgr_session_set_peer_addr(p) ||
 		_fst_mgr_session_set_llt(p->session, llt)) {
 		fst_mgr_printf(MSG_WARNING,
-						"peer " MACSTR ": Cannot initiate next setup: "
-						"session %u configuration failed",
-						MAC2STR(p->addr), p->session->id);
+			"peer %p: Cannot initiate next setup: "
+			"session %u configuration failed", p, p->session->id);
 		return;
 	}
 
 	if (!p->session->non_compliant) {
 		fst_mgr_printf(MSG_INFO,
-			"peer " MACSTR ": session %u: initiating setup: "
+			"peer %p: session %u: initiating setup: "
 			"old_iface=%s new_iface=%s llt=%d",
-			MAC2STR(p->addr), p->session->id,
+			p, p->session->id,
 			p->active_iface->info.name, new_i->info.name, llt);
 		_fst_mgr_session_initiate_setup(p->session);
 	}
@@ -534,23 +587,24 @@ static void _fst_mgr_peer_check_compliance(struct fst_mgr_peer *p)
 	p->session->non_compliant = TRUE;
 	_fst_peer_foreach_iface(p, pi) {
 		if (fst_get_peer_mbies(&pi->iface->info,
-			p->addr, NULL) > 0) {
+			pi->addr, NULL) > 0) {
 			p->session->non_compliant = FALSE;
 			break;
 		}
 	}
-	fst_mgr_printf(MSG_INFO, "peer " MACSTR ": non_compliant: %d",
-		MAC2STR(p->addr), p->session->non_compliant);
+	fst_mgr_printf(MSG_INFO, "peer %p: non_compliant: %d",
+		p, p->session->non_compliant);
 }
 
 static Boolean _fst_mgr_peer_add_iface(struct fst_mgr_peer *p,
-		struct fst_mgr_iface *i)
+		struct fst_mgr_iface *i, const u8 *addr)
 {
 	struct fst_mgr_peer_iface *pi = os_zalloc(sizeof(*pi));
 	if (!pi)
 		return FALSE;
 
 	pi->iface = i;
+	os_memcpy(pi->addr, addr, ETH_ALEN);
 
 	dl_list_add_tail(&p->ifaces, &pi->peer_lentry);
 
@@ -616,13 +670,12 @@ static int _fst_mgr_peer_init(struct fst_mgr_group *g, const u8 *addr,
 
 	dl_list_init(&p->ifaces);
 
-	os_memcpy(p->addr, addr, ETH_ALEN);
 	p->active_iface  = i;
 	p->session       = s;
 
 	dl_list_add_tail(&g->peers, &p->grp_lentry);
 
-	if (!_fst_mgr_peer_add_iface(p, i)) {
+	if (!_fst_mgr_peer_add_iface(p, i, addr)) {
 		fst_mgr_printf(MSG_ERROR, "Peer interface allocation error");
 		goto error_add_iface;
 	}
@@ -630,6 +683,7 @@ static int _fst_mgr_peer_init(struct fst_mgr_group *g, const u8 *addr,
 	fst_mgr_printf(MSG_INFO, "group %s: peer " MACSTR ": iface %s added",
 			g->info.id, MAC2STR(addr), i->info.name);
 
+	_fst_mgr_peer_print_connected_addr(p);
 	return 0;
 
 error_add_iface:
@@ -700,29 +754,125 @@ static struct fst_mgr_peer *_fst_mgr_group_peer_by_addr(struct fst_mgr_group *g,
 	struct fst_mgr_peer *p;
 
 	_fst_grp_foreach_peer(g, p) {
-		if (!os_memcmp(addr, p->addr, ETH_ALEN))
-			return p;
+		struct fst_mgr_peer_iface *pi;
+		_fst_peer_foreach_iface(p, pi) {
+			if (!os_memcmp(addr, pi->addr, ETH_ALEN))
+				return p;
+		}
 	}
 
 	return NULL;
 }
 
-static Boolean _fst_mgr_is_peer_connected(struct fst_mgr_group *g,
-		const char *ifname,
-		const u8 *addr)
+static const u8 *_fst_mgr_get_addr_from_mbie(struct multi_band_ie *mbie)
 {
-	struct fst_mgr_peer *p = NULL;
-	struct fst_mgr_peer_iface *pi;
+	const u8 *addr = NULL;
 
-	p = _fst_mgr_group_peer_by_addr(g, addr);
-	if (!p)
-		return FALSE;
-
-	_fst_peer_foreach_iface(p, pi) {
-		if (!os_strncmp(pi->iface->info.name, ifname, FST_MAX_INTERFACE_SIZE))
-			return TRUE;
+	switch (MB_CTRL_ROLE(mbie->mb_ctrl)) {
+	case MB_STA_ROLE_AP:
+		addr = mbie->bssid;
+		break;
+	case MB_STA_ROLE_NON_PCP_NON_AP:
+		if (mbie->mb_ctrl & MB_CTRL_STA_MAC_PRESENT &&
+			(size_t) 2 + mbie->len >= sizeof(*mbie) + ETH_ALEN)
+			addr = (const u8 *) &mbie[1];
+		break;
+	default:
+		break;
 	}
 
+	return addr;
+}
+
+static Boolean _fst_mgr_is_other_addr_in_mbies(struct fst_iface_info *info,
+					const u8 *addr, const u8 *other_addr)
+{
+	char *str_mbies = NULL;
+	int str_mbies_size;
+	u8 *mbies = NULL, *mbies_iter;
+	int mbies_size;
+	Boolean result = FALSE;
+
+	str_mbies_size = fst_get_peer_mbies(info, addr, &str_mbies);
+	if (str_mbies_size < 2 || str_mbies_size & 1)
+		goto finish;
+
+	mbies_size = str_mbies_size / 2;
+	mbies = os_malloc(mbies_size);
+	if (!mbies)
+		goto finish;
+	if (hexstr2bin(str_mbies, mbies, mbies_size))
+		goto finish;
+
+	mbies_iter = mbies;
+	while (mbies_size >= 2) {
+		struct multi_band_ie *mbie = (struct multi_band_ie *) mbies_iter;
+		const u8 *mbie_addr;
+
+		if (mbie->eid != WLAN_EID_MULTI_BAND ||
+			(size_t) 2 + mbie->len < sizeof(*mbie))
+			break;
+
+		mbie_addr = _fst_mgr_get_addr_from_mbie(mbie);
+		if (mbie_addr && !os_memcmp(mbie_addr, other_addr, ETH_ALEN)) {
+			result = TRUE;
+			break;
+		}
+
+		mbies_iter += mbie->len + 2;
+		mbies_size -= mbie->len + 2;
+	}
+finish:
+	if (str_mbies)
+		os_free(str_mbies);
+	if (mbies)
+		os_free(mbies);
+	return result;
+}
+
+static struct fst_mgr_peer *
+_fst_mgr_group_peer_by_other_addr(struct fst_mgr_group *g,
+				  const u8 *other_addr,
+				  struct fst_iface_info *other_iface_info)
+{
+	struct fst_mgr_peer *p;
+
+	/* check if MAC address of new connection can be found in the MB IE of
+	 * the existing connection under the peer or if the MAC address of the
+	 * existing connections under the peer can be found in the MB IE of
+	 * the new connection.
+	 */
+	_fst_grp_foreach_peer(g, p) {
+		struct fst_mgr_peer_iface *pi;
+		_fst_peer_foreach_iface(p, pi) {
+			if (os_strncmp(pi->iface->info.name,
+				       other_iface_info->name,
+				       FST_MAX_INTERFACE_SIZE) &&
+			    (_fst_mgr_is_other_addr_in_mbies(
+				&pi->iface->info, pi->addr, other_addr) ||
+			     _fst_mgr_is_other_addr_in_mbies(
+				other_iface_info, other_addr, pi->addr)))
+				return p;
+		}
+	}
+	return NULL;
+}
+
+static Boolean _fst_mgr_is_peer_connected(struct fst_mgr_group *g,
+					const char *ifname,
+					const u8 *addr)
+{
+	struct fst_mgr_peer *p = NULL;
+
+	_fst_grp_foreach_peer(g, p) {
+		struct fst_mgr_peer_iface *pi;
+		_fst_peer_foreach_iface(p, pi) {
+			if (!os_strncmp(pi->iface->info.name, ifname, FST_MAX_INTERFACE_SIZE) &&
+				!os_memcmp(pi->addr, addr, ETH_ALEN))
+				return TRUE;
+
+		}
+	}
 	return FALSE;
 }
 
@@ -833,8 +983,8 @@ static int _fst_mgr_group_init(struct fst_mgr *mgr,
 		nof_peers = fst_get_iface_peers(ginfo, &ifaces[i], &peers);
 		if (nof_peers < 0) {
 			fst_mgr_printf(MSG_ERROR,
-				       "Cannot get peers for iface \'%s\'",
-				       ifaces[i].name);
+					   "Cannot get peers for iface \'%s\'",
+					   ifaces[i].name);
 			continue;
 		}
 		p = peers;
@@ -925,14 +1075,14 @@ static void _fst_mgr_on_peer_connected(struct fst_mgr *mgr,
 
 	if (_fst_mgr_is_peer_connected(g, ifname, addr)) {
 		fst_mgr_printf(MSG_INFO, "peer already connected on iface %s",
-			       ifname);
+				   ifname);
 		return;
 	}
 
 	if (fst_cfgmgr_on_connect(&g->info, ifname, addr))
 		return;
 
-	p = _fst_mgr_group_peer_by_addr(g, addr);
+	p = _fst_mgr_group_peer_by_other_addr(g, addr, &i->info);
 	if (!p) {
 		if (!fst_mux_add_map_entry(g->drv, addr, i->info.name))
 			_fst_mgr_peer_init(g, addr, i);
@@ -943,7 +1093,7 @@ static void _fst_mgr_on_peer_connected(struct fst_mgr *mgr,
 		return;
 	}
 
-	if(!_fst_mgr_peer_add_iface(p, i)) {
+	if(!_fst_mgr_peer_add_iface(p, i, addr)) {
 		fst_mgr_printf(MSG_ERROR, "Peer interface allocation error");
 		return;
 	}
@@ -962,6 +1112,8 @@ static void _fst_mgr_on_peer_connected(struct fst_mgr *mgr,
 
 	if (p->session && p->session->non_compliant)
 		_fst_mgr_session_check_for_nc_transfer(p->session, p);
+
+	_fst_mgr_peer_print_connected_addr(p);
 }
 
 static void _fst_mgr_on_peer_disconnected(struct fst_mgr *mgr,
@@ -1024,19 +1176,25 @@ static void _fst_mgr_on_peer_disconnected(struct fst_mgr *mgr,
 		_fst_mgr_peer_session_deinit(p, TRUE);
 	}
 
+	Boolean force_set_active = FALSE;
+	if (i == p->active_iface) {
+		_fst_mgr_peer_set_active_iface(p, NULL, g->drv);
+		force_set_active = TRUE;
+	}
 	_fst_mgr_peer_del_iface(p, i);
+	_fst_mgr_peer_print_connected_addr(p);
 
 	if (switch_initiated)
 		_fst_mgr_peer_set_active_iface(p, p->session->new_iface,
 			g->drv);
 	else if (dl_list_empty(&p->ifaces)) {
 		fst_mgr_printf(MSG_INFO, "group %s: peer " MACSTR
-				": deinitializing peer (no more interfaces)",
-				g->info.id, MAC2STR(addr));
+				   ": deinitializing peer (no more interfaces)",
+				   g->info.id, MAC2STR(addr));
 		_fst_mgr_peer_deinit(p);
 		fst_mux_del_map_entry(g->drv, addr);
 	} else {
-		if (i == p->active_iface) {
+		if (force_set_active) {
 			struct fst_mgr_iface *new_i =
 					_fst_mgr_peer_get_next_iface(p);
 			fst_mgr_printf(MSG_INFO, "group %s: peer " MACSTR
@@ -1084,7 +1242,7 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 	WPA_ASSERT(p != NULL);
 	if (p == NULL) {
 		fst_mgr_printf(MSG_ERROR, "peer not found for group %s, session %u",
-			       g->info.id, s->id);
+				   g->info.id, s->id);
 		return;
 	}
 
@@ -1094,15 +1252,19 @@ static void _fst_mgr_on_ctrl_notification_state_change(struct fst_mgr *mgr,
 	case REASON_SWITCH:
 		WPA_ASSERT(evext->session_state.extra.to_initial.initiator !=
 			FST_INITIATOR_UNDEFINED);
-		fst_mgr_printf(MSG_INFO, "session %u: " MACSTR " switched by %s side",
-			s->id, MAC2STR(s->addr),
+		fst_mgr_printf(MSG_INFO, "session %u: switched by %s side",
+			s->id,
 			(evext->session_state.extra.to_initial.initiator ==
 				FST_INITIATOR_LOCAL) ? "local" : "remote");
 		_fst_mgr_peer_set_active_iface(p, s->new_iface, g->drv);
 		s->state = FST_MGR_SESSION_STATE_IDLE;
 
-		fst_cfgmgr_on_switch_completed(&g->info, s->old_iface->info.name,
-			s->new_iface->info.name, p->addr);
+		const u8 *old_addr = _fst_mgr_peer_get_addr_of_iface(p, s->old_iface);
+		if (old_addr)
+			fst_cfgmgr_on_switch_completed(&g->info,
+						       s->old_iface->info.name,
+						       s->new_iface->info.name,
+						       old_addr);
 
 		break;
 	case REASON_TEARDOWN:
@@ -1160,13 +1322,6 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 			session_id);
 	}
 
-	if (os_memcmp(sinfo.old_peer_addr, sinfo.new_peer_addr, ETH_ALEN)) {
-		fst_mgr_printf(MSG_ERROR, "session %u: " MACSTR
-			": non-transparent FST is not supported",
-			session_id, MAC2STR(sinfo.old_peer_addr));
-		return;
-	}
-
 	g = _fst_mgr_group_by_ifname(mgr, sinfo.old_ifname, &old_i);
 	if (!g) {
 		fst_mgr_printf(MSG_ERROR, "session %u: no group found for iface %s",
@@ -1190,8 +1345,16 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 
 	p = _fst_mgr_group_peer_by_addr(g, sinfo.old_peer_addr);
 	if (!p) {
-		fst_mgr_printf(MSG_ERROR, "session %u: no peer found for " MACSTR,
-			session_id, MAC2STR(sinfo.old_peer_addr));
+		fst_mgr_printf(MSG_ERROR, "session %u: no peer found for old mac "
+			MACSTR, session_id, MAC2STR(sinfo.old_peer_addr));
+		return;
+	}
+
+	if (p != _fst_mgr_group_peer_by_addr(g, sinfo.new_peer_addr)) {
+		fst_mgr_printf(MSG_ERROR,
+			"session %u: mismatch of peer with old mac (" MACSTR
+			") and peer with new mac (" MACSTR ")", session_id,
+			MAC2STR(sinfo.old_peer_addr), MAC2STR(sinfo.new_peer_addr));
 		return;
 	}
 
@@ -1221,8 +1384,6 @@ static void _fst_mgr_on_setup(struct fst_mgr *mgr, u32 session_id)
 	s->state         = FST_MGR_SESSION_STATE_INITIATED;
 	s->non_compliant = FALSE;
 
-	os_memcpy(s->addr, sinfo.old_peer_addr, ETH_ALEN);
-
 	if (new_i->info.priority > old_i->info.priority) {
 		_fst_mgr_session_set_llt(s, FST_LLT_SWITCH_IMMEDIATELY);
 		s->llt = FST_LLT_SWITCH_IMMEDIATELY;
@@ -1251,7 +1412,7 @@ static void _fst_mgr_ctrl_notification_cb_func(void *cb_ctx,
 	struct fst_mgr_session *s   = NULL;
 
 	if (event_type != EVENT_FST_SETUP &&
-	    session_id != FST_INVALID_SESSION_ID) {
+		session_id != FST_INVALID_SESSION_ID) {
 		g = _fst_mgr_group_by_session_id(mgr, session_id, &s);
 		if (!g) {
 			fst_mgr_printf(MSG_ERROR, "session %u: no group found",

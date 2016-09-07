@@ -230,7 +230,8 @@ static int do_bonding_operations(Boolean enslave)
 	for (i = 0; i < gcnt; i++) {
 		muxtype = fst_cfgmgr_get_mux_type(groups[i].id,
 			buf, sizeof(buf)-1);
-		if (muxtype && os_strcmp(buf, "bonding")) {
+		if (muxtype && os_strncmp(buf, "bonding", sizeof(buf)-1) &&
+				os_strncmp(buf, "bonding_l2da", sizeof(buf)-1)) {
 			fst_mgr_printf(MSG_DEBUG,
 				"Group %s mux type %s not supported, skipping",
 				groups[i].id, buf);
@@ -262,7 +263,7 @@ static int do_bonding_operations(Boolean enslave)
 			if (enslave)
 				res = enslave_device(sock, buf, ifaces[j].name);
 			else
-				res = release_device(sock, buf, ifaces[i].name);
+				res = release_device(sock, buf, ifaces[j].name);
 			if (res < 0) {
 				fst_mgr_printf(MSG_ERROR, "Cannot process %s",
 					ifaces[j].name);
@@ -736,6 +737,25 @@ int fst_cfgmgr_get_mux_ifname(const char *gname, char *buf, int blen)
 			os_strlcpy(buf, gname, blen);
 			res = os_strlen(buf);
 		}
+		break;
+	default:
+		fst_mgr_printf(MSG_ERROR, "Wrong config method");
+		res = -1;
+		break;
+	}
+	return res;
+}
+
+int fst_cfgmgr_get_l2da_ap_default_ifname(const char *gname, char *buf,
+	int blen)
+{
+	int res = 0;
+	switch (fstcfg.method) {
+	case FST_CONFIG_CLI:
+		break;
+	case FST_CONFIG_INI:
+		res = fst_ini_config_get_l2da_ap_default_ifname(fstcfg.handle, gname,
+			buf, blen);
 		break;
 	default:
 		fst_mgr_printf(MSG_ERROR, "Wrong config method");
