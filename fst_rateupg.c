@@ -38,6 +38,7 @@
 
 #define FST_MGR_COMPONENT "RATEUPG"
 #include "fst_manager.h"
+#include "common/ieee802_11_defs.h"
 
 struct rate_upgrade_mac {
 	u8             addr[ETH_ALEN];
@@ -276,12 +277,106 @@ int fst_rate_upgrade_del_group(const struct fst_group_info *group)
 	deinit_rate_upgrade_group(g);
 	return 0;
 }
+static int fst_dup_connection_sta(const struct rate_upgrade_group *g,
+				  const char *iface, const u8* addr)
+{
+	int i;
+	struct multi_band_ie *mbie;
+	char *str_mbies = NULL;
+	int str_mbies_size;
+	int mbies_size;
+	u8 *mbies = NULL, *mbies_iter;
 
+	str_mbies_size = fst_get_peer_mbies(iface, addr,
+					    &str_mbies);
+	if (str_mbies_size < 2 || str_mbies_size & 1) {
+		fst_mgr_printf(MSG_INFO, "invalid mbies size %d",
+			       str_mbies_size);
+		for (i = 0; i < g->slave_cnt; i++) {
+			if (fst_dup_connection(&g->slaves[i], g->master, addr,
+					       g->acl_fname)) {
+				fst_mgr_printf(MSG_ERROR, "Cannot connect iface %s",
+					       g->slaves[i].name);
+				goto error_connect;
+			}
+		}
+		os_free(str_mbies);
+		return 0;
+	}
+
+	mbies_size = str_mbies_size / 2;
+	mbies = os_malloc(mbies_size);
+	if (!mbies) {
+		fst_mgr_printf(MSG_ERROR, "mbies allocation failed");
+		goto error_mbie;
+	}
+	if (hexstr2bin(str_mbies, mbies, mbies_size)) {
+		fst_mgr_printf(MSG_ERROR, "failed converting hex mbie to bin");
+		goto error_mbie;
+	}
+	os_free(str_mbies);
+
+	/* for each slave duplicate the addresses from all bands */
+	for (i = 0; i < g->slave_cnt; i++) {
+		mbies_iter = mbies;
+		while (mbies_size >= 2) {
+			struct multi_band_ie *mbie = (struct multi_band_ie *) mbies_iter;
+			const u8 *addr_on_other_band;
+
+			if (mbie->eid != WLAN_EID_MULTI_BAND ||
+			    (size_t) 2 + mbie->len < sizeof(*mbie))
+				break;
+
+			addr_on_other_band = fst_mgr_get_addr_from_mbie(mbie);
+			if (!addr_on_other_band)
+				continue;
+
+			if (fst_dup_connection(&g->slaves[i], g->master,
+					       addr_on_other_band,
+					       g->acl_fname))
+				goto error_connect;
+
+			mbies_iter += mbie->len + 2;
+			mbies_size -= mbie->len + 2;
+		}
+	}
+	os_free(mbies);
+	return 0;
+
+error_connect:
+	while (i-- > 0)
+		fst_dedup_connection(&g->slaves[i], g->acl_fname);
+error_mbie:
+	os_free(str_mbies);
+	os_free(mbies);
+	return -1;
+}
+
+static int fst_dup_connection_ap(const struct rate_upgrade_group *g,
+				 const u8* addr)
+{
+	int i;
+
+	for (i = 0; i < g->slave_cnt; i++) {
+		if (fst_dup_connection(&g->slaves[i], g->master, addr,
+				       g->acl_fname)) {
+			fst_mgr_printf(MSG_ERROR, "Cannot connect iface %s",
+				       g->slaves[i].name);
+			goto error_connect;
+		}
+	}
+	return 0;
+
+error_connect:
+	while (i-- > 0)
+		fst_dedup_connection(&g->slaves[i], g->acl_fname);
+	return -1;
+}
 
 int fst_rate_upgrade_on_connect(const struct fst_group_info *group,
 	const char *iface, const u8* addr)
 {
-	int i = 0;
+	int res;
 	struct rate_upgrade_group *g;
 	struct rate_upgrade_mac *p;
 
@@ -307,19 +402,14 @@ int fst_rate_upgrade_on_connect(const struct fst_group_info *group,
 		goto error_acl_file;
 	}
 
-	for (i = 0; i < g->slave_cnt; i++) {
-		if (fst_dup_connection(&g->slaves[i], g->master, addr,
-				       g->acl_fname)) {
-			fst_mgr_printf(MSG_ERROR, "Cannot connect iface %s",
-			g->slaves[i].name);
-			goto error_connect;
-		}
-	}
-	return 0;
+	if (fst_is_supplicant())
+		res = fst_dup_connection_sta(g, iface, addr);
+	else
+		res = fst_dup_connection_ap(g, addr);
 
-error_connect:
-	while(i-- > 0)
-		fst_dedup_connection(&g->slaves[i], g->acl_fname);
+	if (!res)
+		return res;
+
 error_acl_file:
 	del_rate_upgrade_mac(p);
 	return -1;
