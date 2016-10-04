@@ -70,5 +70,5 @@ extern unsigned int fst_debug_level;
 
 int  fst_manager_init(void);
 void fst_manager_deinit(void);
-
+const u8 *fst_mgr_get_addr_from_mbie(struct multi_band_ie *mbie);
 #endif /* __FST_MANAGER_H__ */

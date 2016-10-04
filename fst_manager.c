@@ -764,7 +764,7 @@ static struct fst_mgr_peer *_fst_mgr_group_peer_by_addr(struct fst_mgr_group *g,
 	return NULL;
 }
 
-static const u8 *_fst_mgr_get_addr_from_mbie(struct multi_band_ie *mbie)
+const u8 *fst_mgr_get_addr_from_mbie(struct multi_band_ie *mbie)
 {
 	const u8 *addr = NULL;
 
@@ -813,7 +813,7 @@ static Boolean _fst_mgr_is_other_addr_in_mbies(struct fst_iface_info *info,
 			(size_t) 2 + mbie->len < sizeof(*mbie))
 			break;
 
-		mbie_addr = _fst_mgr_get_addr_from_mbie(mbie);
+		mbie_addr = fst_mgr_get_addr_from_mbie(mbie);
 		if (mbie_addr && !os_memcmp(mbie_addr, other_addr, ETH_ALEN)) {
 			result = TRUE;
 			break;
