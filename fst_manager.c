@@ -454,12 +454,14 @@ static int _fst_mgr_peer_set_active_iface(struct fst_mgr_peer *p,
 
 	if (p->active_iface) {
 		const u8 *addr = _fst_mgr_peer_get_addr_of_iface(p, p->active_iface);
-		fst_mux_del_map_entry(drv, addr);
-		fst_mgr_printf(MSG_INFO,
-				"Map entry removed: " MACSTR " via %s",
-				MAC2STR(addr),
-				p->active_iface->info.name);
-		p->active_iface = NULL;
+		if (addr) {
+			fst_mux_del_map_entry(drv, addr);
+			fst_mgr_printf(MSG_INFO,
+				       "Map entry removed: " MACSTR " via %s",
+				       MAC2STR(addr),
+				       p->active_iface->info.name);
+			p->active_iface = NULL;
+		}
 	}
 
 	if (!i)
@@ -586,7 +588,7 @@ static void _fst_mgr_peer_check_compliance(struct fst_mgr_peer *p)
 
 	p->session->non_compliant = TRUE;
 	_fst_peer_foreach_iface(p, pi) {
-		if (fst_get_peer_mbies(&pi->iface->info,
+		if (fst_get_peer_mbies(pi->iface->info.name,
 			pi->addr, NULL) > 0) {
 			p->session->non_compliant = FALSE;
 			break;
@@ -793,7 +795,7 @@ static Boolean _fst_mgr_is_other_addr_in_mbies(struct fst_iface_info *info,
 	int mbies_size;
 	Boolean result = FALSE;
 
-	str_mbies_size = fst_get_peer_mbies(info, addr, &str_mbies);
+	str_mbies_size = fst_get_peer_mbies(info->name, addr, &str_mbies);
 	if (str_mbies_size < 2 || str_mbies_size & 1)
 		goto finish;
 
